@@ -27,6 +27,7 @@ import { AppLauncherMode } from './components/AppLauncherMode';
 import { MacrosMode } from './components/MacrosMode';
 import { DualDeviceScreenPreview } from './components/DualDeviceScreenPreview';
 import { NetworkConfigModal } from './components/NetworkConfigModal';
+import { MobileTestingModal } from './components/MobileTestingModal';
 import {
   Tv,
   MousePointer,
@@ -37,6 +38,7 @@ import {
   CheckCircle2,
   Sparkles,
   WifiOff,
+  Smartphone,
 } from 'lucide-react';
 
 export default function App() {
@@ -68,6 +70,7 @@ export default function App() {
   // Preview visualizer state
   const [showPreview, setShowPreview] = useState(true);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isMobileTestOpen, setIsMobileTestOpen] = useState(false);
   const [isTestingPing, setIsTestingPing] = useState(false);
 
   // Command Execution & Telemetry
@@ -259,11 +262,31 @@ export default function App() {
         onOpenSettings={() => setIsSettingsOpen(true)}
         showPreview={showPreview}
         onTogglePreview={() => setShowPreview((v) => !v)}
+        onOpenMobileTest={() => setIsMobileTestOpen(true)}
       />
 
       {/* Main Container */}
       <main className="flex-1 w-full max-w-4xl mx-auto px-3 sm:px-4 py-4 sm:py-6 flex flex-col items-center">
         
+        {/* Quick Mobile Test Callout */}
+        <div className="w-full max-w-2xl mb-4 bg-gradient-to-r from-cyan-950/40 via-slate-900 to-blue-950/40 border border-cyan-800/40 rounded-2xl p-3 px-4 flex flex-col sm:flex-row items-center justify-between gap-2.5 shadow-sm">
+          <div className="flex items-center gap-2.5 text-xs text-slate-300">
+            <div className="w-7 h-7 rounded-lg bg-cyan-500/20 text-cyan-400 flex items-center justify-center flex-shrink-0">
+              <Smartphone className="w-4 h-4" />
+            </div>
+            <div>
+              <p className="font-semibold text-white">Want to control from your phone?</p>
+              <p className="text-[11px] text-slate-400">Scan QR or open directly in iPhone Safari / Android Chrome</p>
+            </div>
+          </div>
+          <button
+            onClick={() => setIsMobileTestOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-bold transition shadow active:scale-95 whitespace-nowrap"
+          >
+            <span>📱 Open Mobile QR</span>
+          </button>
+        </div>
+
         {/* Dual-Device Screen Preview (collapsible / toggleable) */}
         {showPreview && (
           <DualDeviceScreenPreview
@@ -406,6 +429,12 @@ export default function App() {
         onClearLogs={() => setCommandLogs([])}
         onTestPing={handleTestPing}
         isTestingPing={isTestingPing}
+      />
+
+      {/* MOBILE TESTING & QR CODE MODAL */}
+      <MobileTestingModal
+        isOpen={isMobileTestOpen}
+        onClose={() => setIsMobileTestOpen(false)}
       />
 
       {/* OFFLINE INDICATOR (PWA requirement) */}
