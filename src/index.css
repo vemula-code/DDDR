@@ -1,0 +1,36 @@
+@import "tailwindcss";
+
+@layer utilities {
+  /* Prevent pull-to-refresh on mobile when using remote */
+  html, body {
+    overscroll-behavior-y: none;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  /* Remote tactile button push styles */
+  .remote-btn {
+    transition: transform 0.08s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.08s cubic-bezier(0.4, 0, 0.2, 1), filter 0.08s ease;
+  }
+
+  .remote-btn:active {
+    transform: scale(0.93) translateY(2px);
+    filter: brightness(0.9);
+  }
+
+  /* Inset metallic remote bevel */
+  .remote-chassis {
+    box-shadow: 
+      0 20px 40px -15px rgba(0, 0, 0, 0.7),
+      inset 0 1px 1px rgba(255, 255, 255, 0.12),
+      inset 0 -2px 4px rgba(0, 0, 0, 0.6);
+  }
+
+  .dpad-ring {
+    box-shadow: 
+      0 8px 16px -4px rgba(0, 0, 0, 0.6),
+      inset 0 2px 4px rgba(255, 255, 255, 0.08),
+      inset 0 -2px 6px rgba(0, 0, 0, 0.8);
+  }
+}

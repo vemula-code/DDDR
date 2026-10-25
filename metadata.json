@@ -1,0 +1,6 @@
+{
+  "name": "DRemote - Dual Fire TV Unified Remote",
+  "description": "Unified PWA remote control to seamlessly control your Toshiba Fire TV and Fire TV Stick 4K Max simultaneously without swapping remotes.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
