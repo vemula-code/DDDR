@@ -24,6 +24,7 @@ import { CleanHeaderBar } from './components/CleanHeaderBar';
 import { CleanFireRemote } from './components/CleanFireRemote';
 import { SimpleKeyboardModal } from './components/SimpleKeyboardModal';
 import { FireTVPairingModal } from './components/FireTVPairingModal';
+import { AutoDiscoveryModal } from './components/AutoDiscoveryModal';
 import { NetworkConfigModal } from './components/NetworkConfigModal';
 import { DeviceState, CommandLogEntry, TargetDeviceType } from './types/remote';
 import { INITIAL_DEVICES } from './services/remoteBridge';
@@ -41,6 +42,7 @@ export default function App() {
   const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isPairingModalOpen, setIsPairingModalOpen] = useState(false);
+  const [isAutoDiscoveryOpen, setIsAutoDiscoveryOpen] = useState(false);
   const [pairingTargetId, setPairingTargetId] = useState<'firestick_4k' | 'toshiba_tv'>('firestick_4k');
 
   // Preferences
@@ -69,11 +71,8 @@ export default function App() {
     });
   }, []);
 
-  const handleRefreshWifi = async () => {
-    setIsScanningWifi(true);
-    const discovered = await autoDiscoverWifiDevices();
-    setDevices(discovered);
-    setIsScanningWifi(false);
+  const handleRefreshWifi = () => {
+    setIsAutoDiscoveryOpen(true);
   };
 
   // Convert UI Command Key to Fire TV Lightning REST Action
@@ -218,6 +217,7 @@ export default function App() {
           onSendCommand={handleSendCommand}
           onOpenKeyboard={() => setIsKeyboardOpen(true)}
           onOpenPairing={handleOpenPairingModal}
+          onOpenAutoDetect={() => setIsAutoDiscoveryOpen(true)}
           soundEnabled={soundEnabled}
           hapticsEnabled={hapticsEnabled}
           tvCurrentInput={tvCurrentInput}
@@ -225,7 +225,16 @@ export default function App() {
         />
       </main>
 
-      {/* 3. FIRE TV PAIRING & PIN CODE MODAL */}
+      {/* 3. AUTO-DISCOVERY WI-FI & BLUETOOTH RADAR MODAL */}
+      <AutoDiscoveryModal
+        isOpen={isAutoDiscoveryOpen}
+        onClose={() => setIsAutoDiscoveryOpen(false)}
+        onApplyDevices={(newDevs) => {
+          setDevices(newDevs);
+        }}
+      />
+
+      {/* 4. FIRE TV PAIRING & PIN CODE MODAL */}
       <FireTVPairingModal
         isOpen={isPairingModalOpen}
         onClose={() => setIsPairingModalOpen(false)}

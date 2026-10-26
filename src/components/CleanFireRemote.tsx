@@ -28,6 +28,7 @@ import {
   Wifi,
   Sparkles,
   CheckCircle2,
+  Search,
 } from 'lucide-react';
 
 interface CleanFireRemoteProps {
@@ -41,6 +42,7 @@ interface CleanFireRemoteProps {
   tvCurrentInput?: string;
   tvVolume: number;
   onOpenPairing: (deviceId: 'firestick_4k' | 'toshiba_tv') => void;
+  onOpenAutoDetect: () => void;
 }
 
 export const CleanFireRemote: React.FC<CleanFireRemoteProps> = ({
@@ -54,6 +56,7 @@ export const CleanFireRemote: React.FC<CleanFireRemoteProps> = ({
   tvCurrentInput = 'HDMI 2',
   tvVolume,
   onOpenPairing,
+  onOpenAutoDetect,
 }) => {
   const [isTransmitting, setIsTransmitting] = useState(false);
   const [lastAction, setLastAction] = useState<string>('Ready');
@@ -120,20 +123,22 @@ export const CleanFireRemote: React.FC<CleanFireRemoteProps> = ({
         </button>
       </div>
 
-      {/* 2. AUTO-DISCOVERED WI-FI STATUS BADGE & PAIR BUTTON */}
-      <div className="w-full mb-3 flex items-center justify-between px-3 text-[11px] text-slate-400">
-        <div className="flex items-center gap-1.5 text-emerald-400 font-medium">
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-          <span>Wi-Fi Active</span>
-          <span className="text-slate-500">({activeDevice.ip})</span>
+      {/* 2. AUTO-DISCOVERED WI-FI STATUS BADGE & AUTO-DETECT BUTTON */}
+      <div className="w-full mb-3 flex items-center justify-between px-2.5 py-1.5 bg-slate-900/60 border border-slate-800/80 rounded-2xl text-[11px] text-slate-400">
+        <div className="flex items-center gap-1.5 text-emerald-400 font-semibold truncate">
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
+          <span className="truncate">{activeDevice.name} ({activeDevice.ip})</span>
         </div>
-        <button
-          onClick={() => onOpenPairing(selectedDeviceId)}
-          className="flex items-center gap-1 text-[10px] bg-slate-800/80 hover:bg-slate-750 text-cyan-300 border border-slate-700/80 px-2 py-0.5 rounded-full font-medium transition active:scale-95"
-          title="Connect or change real TV IP address"
-        >
-          <span>Pair Real TV IP</span>
-        </button>
+        <div className="flex items-center gap-1 flex-shrink-0">
+          <button
+            onClick={onOpenAutoDetect}
+            className="flex items-center gap-1 text-[11px] bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 px-2.5 py-1 rounded-xl font-bold transition active:scale-95 shadow-sm"
+            title="Automatically scan home Wi-Fi and find your Fire TVs"
+          >
+            <Search className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Auto-Detect</span>
+          </button>
+        </div>
       </div>
 
       {/* 3. REALISTIC PHYSICAL FIRE TV REMOTE CHASSIS */}
