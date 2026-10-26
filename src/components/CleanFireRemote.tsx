@@ -40,6 +40,7 @@ interface CleanFireRemoteProps {
   hapticsEnabled: boolean;
   tvCurrentInput?: string;
   tvVolume: number;
+  onOpenPairing: (deviceId: 'firestick_4k' | 'toshiba_tv') => void;
 }
 
 export const CleanFireRemote: React.FC<CleanFireRemoteProps> = ({
@@ -52,6 +53,7 @@ export const CleanFireRemote: React.FC<CleanFireRemoteProps> = ({
   hapticsEnabled,
   tvCurrentInput = 'HDMI 2',
   tvVolume,
+  onOpenPairing,
 }) => {
   const [isTransmitting, setIsTransmitting] = useState(false);
   const [lastAction, setLastAction] = useState<string>('Ready');
@@ -118,15 +120,20 @@ export const CleanFireRemote: React.FC<CleanFireRemoteProps> = ({
         </button>
       </div>
 
-      {/* 2. AUTO-DISCOVERED WI-FI STATUS BADGE */}
+      {/* 2. AUTO-DISCOVERED WI-FI STATUS BADGE & PAIR BUTTON */}
       <div className="w-full mb-3 flex items-center justify-between px-3 text-[11px] text-slate-400">
         <div className="flex items-center gap-1.5 text-emerald-400 font-medium">
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-          <span>Wi-Fi: Auto-Connected</span>
+          <span>Wi-Fi Active</span>
+          <span className="text-slate-500">({activeDevice.ip})</span>
         </div>
-        <span className="text-slate-500 font-mono">
-          {isStick ? 'Controlling: 4K Max' : 'Controlling: Toshiba TV'}
-        </span>
+        <button
+          onClick={() => onOpenPairing(selectedDeviceId)}
+          className="flex items-center gap-1 text-[10px] bg-slate-800/80 hover:bg-slate-750 text-cyan-300 border border-slate-700/80 px-2 py-0.5 rounded-full font-medium transition active:scale-95"
+          title="Connect or change real TV IP address"
+        >
+          <span>Pair Real TV IP</span>
+        </button>
       </div>
 
       {/* 3. REALISTIC PHYSICAL FIRE TV REMOTE CHASSIS */}

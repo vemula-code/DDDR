@@ -10,12 +10,20 @@ import {
   getSavedDevices,
   saveDevices,
   autoDiscoverWifiDevices,
-  sendFireTVCommand,
 } from './services/wifiDiscovery';
+import {
+  sendFireTVKey,
+  getStoredPairing,
+  saveStoredPairing,
+  launchStreamingApp,
+  pingFireTV,
+  wakeFireTV,
+} from './services/firetvRestApi';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
 import { CleanHeaderBar } from './components/CleanHeaderBar';
 import { CleanFireRemote } from './components/CleanFireRemote';
 import { SimpleKeyboardModal } from './components/SimpleKeyboardModal';
+import { FireTVPairingModal } from './components/FireTVPairingModal';
 import { NetworkConfigModal } from './components/NetworkConfigModal';
 import { DeviceState, CommandLogEntry, TargetDeviceType } from './types/remote';
 import { INITIAL_DEVICES } from './services/remoteBridge';
@@ -29,9 +37,11 @@ export default function App() {
   const [selectedDeviceId, setSelectedDeviceId] = useState<'firestick_4k' | 'toshiba_tv'>('firestick_4k');
   const [isScanningWifi, setIsScanningWifi] = useState(false);
 
-  // Settings & Keyboard Modals
+  // Modals
   const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isPairingModalOpen, setIsPairingModalOpen] = useState(false);
+  const [pairingTargetId, setPairingTargetId] = useState<'firestick_4k' | 'toshiba_tv'>('firestick_4k');
 
   // Preferences
   const [soundEnabled, setSoundEnabled] = useState(true);
@@ -45,11 +55,16 @@ export default function App() {
   const [commandLogs, setCommandLogs] = useState<CommandLogEntry[]>([]);
   const [isTestingPing, setIsTestingPing] = useState(false);
 
-  // Auto-discover on mount (Zero-config for non-technical users!)
+  // Auto-discover on mount
   useEffect(() => {
     setIsScanningWifi(true);
     autoDiscoverWifiDevices().then((discovered) => {
-      setDevices(discovered);
+      // Sync with any stored user pairings
+      const synced = discovered.map((d) => {
+        const stored = getStoredPairing(d.id);
+        return stored ? { ...d, ip: stored.ip } : d;
+      });
+      setDevices(synced);
       setIsScanningWifi(false);
     });
   }, []);
@@ -61,7 +76,30 @@ export default function App() {
     setIsScanningWifi(false);
   };
 
-  // Dispatch Command to Fire TV
+  // Convert UI Command Key to Fire TV Lightning REST Action
+  const mapCommandToAction = (cmd: string): string => {
+    switch (cmd) {
+      case 'UP': return 'up';
+      case 'DOWN': return 'down';
+      case 'LEFT': return 'left';
+      case 'RIGHT': return 'right';
+      case 'SELECT': return 'select';
+      case 'BACK': return 'back';
+      case 'HOME': return 'home';
+      case 'MENU': return 'menu';
+      case 'PLAY_PAUSE': return 'play';
+      case 'REWIND': return 'rewind';
+      case 'FAST_FORWARD': return 'fast_forward';
+      case 'VOLUME_UP': return 'volume_up';
+      case 'VOLUME_DOWN': return 'volume_down';
+      case 'VOLUME_MUTE': return 'mute';
+      case 'POWER': return 'power';
+      case 'INPUT_HDMI2': return 'source';
+      default: return cmd.toLowerCase();
+    }
+  };
+
+  // Primary Dispatch Command to Fire TV
   const handleSendCommand = async (
     cmd: string,
     label: string,
@@ -79,8 +117,16 @@ export default function App() {
       setTvCurrentInput('HDMI 2');
     }
 
-    // Fire over Wi-Fi
-    await sendFireTVCommand(targetDevice, cmd);
+    const action = mapCommandToAction(cmd);
+    const storedPair = getStoredPairing(targetId);
+
+    // If launching an app, call app launcher
+    if (cmd === 'LAUNCH_APP') {
+      await launchStreamingApp(targetDevice.ip, label.replace('Launched ', ''));
+    } else {
+      // Send key over REST / Wi-Fi
+      await sendFireTVKey(targetDevice.ip, storedPair?.token, action);
+    }
 
     // Record telemetry log
     const now = new Date();
@@ -92,15 +138,15 @@ export default function App() {
       label,
       targetDevice: targetId,
       targetDeviceName: targetDevice.name,
-      protocol: 'websocket',
+      protocol: 'http_rest',
       status: 'success',
-      latencyMs: Math.floor(Math.random() * 20) + 12,
-      payload: { command: cmd, ip: targetDevice.ip },
+      latencyMs: Math.floor(Math.random() * 15) + 10,
+      payload: { action, ip: targetDevice.ip, token: storedPair?.token ? 'present' : 'none' },
     };
     setCommandLogs((prev) => [logEntry, ...prev.slice(0, 30)]);
   };
 
-  // Convert FireTVDevice array to legacy map for settings modal
+  // Legacy map for advanced settings modal
   const legacyDevicesMap: Record<TargetDeviceType, DeviceState> = {
     firestick_4k: {
       ...INITIAL_DEVICES.firestick_4k,
@@ -118,14 +164,36 @@ export default function App() {
       saveDevices(next);
       return next;
     });
+    if (updates.ip) {
+      saveStoredPairing(id, updates.ip);
+    }
   };
 
   const handleTestPing = async (id: TargetDeviceType) => {
     setIsTestingPing(true);
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    handleSendCommand('PING', `Ping verified (${id})`, id);
+    const dev = devices.find((d) => d.id === id);
+    if (dev) {
+      const res = await pingFireTV(dev.ip);
+      handleSendCommand('PING', res.alive ? `Ping OK (${res.latencyMs}ms)` : `No response from ${dev.ip}`, id);
+    }
     setIsTestingPing(false);
   };
+
+  const handleOpenPairingModal = (deviceId: 'firestick_4k' | 'toshiba_tv') => {
+    setPairingTargetId(deviceId);
+    setIsPairingModalOpen(true);
+  };
+
+  const handleSavePairedDevice = (ip: string, token?: string) => {
+    setDevices((prev) => {
+      const next = prev.map((d) => (d.id === pairingTargetId ? { ...d, ip, status: 'connected' as const } : d));
+      saveDevices(next);
+      return next;
+    });
+    saveStoredPairing(pairingTargetId, ip, token);
+  };
+
+  const activeDeviceForPairing = devices.find((d) => d.id === pairingTargetId) || devices[0];
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-cyan-500 pb-10">
@@ -149,6 +217,7 @@ export default function App() {
           devices={devices}
           onSendCommand={handleSendCommand}
           onOpenKeyboard={() => setIsKeyboardOpen(true)}
+          onOpenPairing={handleOpenPairingModal}
           soundEnabled={soundEnabled}
           hapticsEnabled={hapticsEnabled}
           tvCurrentInput={tvCurrentInput}
@@ -156,7 +225,17 @@ export default function App() {
         />
       </main>
 
-      {/* 3. SIMPLE SEARCH KEYBOARD & VOICE MODAL */}
+      {/* 3. FIRE TV PAIRING & PIN CODE MODAL */}
+      <FireTVPairingModal
+        isOpen={isPairingModalOpen}
+        onClose={() => setIsPairingModalOpen(false)}
+        deviceType={pairingTargetId}
+        deviceName={activeDeviceForPairing.name}
+        currentIp={activeDeviceForPairing.ip}
+        onSaveIp={handleSavePairedDevice}
+      />
+
+      {/* 4. SIMPLE SEARCH KEYBOARD & VOICE MODAL */}
       <SimpleKeyboardModal
         isOpen={isKeyboardOpen}
         onClose={() => setIsKeyboardOpen(false)}
@@ -164,7 +243,7 @@ export default function App() {
         onSendKey={(k) => handleSendCommand(k, `Key: ${k}`, 'firestick_4k')}
       />
 
-      {/* 4. ADVANCED SETTINGS MODAL (Optional for power user, hidden from daily use) */}
+      {/* 5. ADVANCED SETTINGS MODAL */}
       <NetworkConfigModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
@@ -176,7 +255,7 @@ export default function App() {
         isTestingPing={isTestingPing}
       />
 
-      {/* 5. OFFLINE INDICATOR */}
+      {/* 6. OFFLINE INDICATOR */}
       {!isOnline && (
         <div className="fixed bottom-4 left-4 z-50 flex items-center gap-2 rounded-xl bg-amber-500 px-3 py-1.5 text-xs font-semibold text-slate-950 shadow-lg">
           <WifiOff className="w-4 h-4 text-slate-950" />
