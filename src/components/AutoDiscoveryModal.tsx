@@ -18,6 +18,7 @@ import {
   ArrowRight,
   ShieldCheck,
   AlertCircle,
+  KeyRound,
 } from 'lucide-react';
 
 interface AutoDiscoveryModalProps {
@@ -37,6 +38,10 @@ export const AutoDiscoveryModal: React.FC<AutoDiscoveryModalProps> = ({
   const [activeTab, setActiveTab] = useState<'wifi' | 'bluetooth'>('wifi');
   const [bluetoothStatus, setBluetoothStatus] = useState<string | null>(null);
 
+  // Manual IP fallback states if browser sandbox blocks subnet scan
+  const [stickIp, setStickIp] = useState('');
+  const [tvIp, setTvIp] = useState('');
+
   const startScan = async () => {
     setIsScanning(true);
     setFoundDevices([]);
@@ -47,33 +52,9 @@ export const AutoDiscoveryModal: React.FC<AutoDiscoveryModalProps> = ({
         setProgress({ scanned, total });
         setFoundDevices(found);
       });
-
-      // If network probe completed but browser blocked local cross-origin HTTP,
-      // provide smart fallback with verified common Wi-Fi router addresses
-      if (results.length === 0) {
-        // Fallback: provide auto-detected presets for user's home Wi-Fi
-        const mockDiscovered: DiscoveredFireTV[] = [
-          {
-            ip: '192.168.1.106',
-            port: 8008,
-            name: 'Fire TV Stick 4K Max',
-            type: 'stick',
-            responseTimeMs: 18,
-          },
-          {
-            ip: '192.168.1.105',
-            port: 8008,
-            name: 'Toshiba Fire TV Edition',
-            type: 'tv',
-            responseTimeMs: 24,
-          },
-        ];
-        setFoundDevices(mockDiscovered);
-      } else {
-        setFoundDevices(results);
-      }
+      setFoundDevices(results);
     } catch {
-      // Handled
+      setFoundDevices([]);
     } finally {
       setIsScanning(false);
     }
@@ -87,7 +68,7 @@ export const AutoDiscoveryModal: React.FC<AutoDiscoveryModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleApply = () => {
+  const handleApplyDiscovered = () => {
     if (foundDevices.length === 0) return;
 
     const stickDev = foundDevices.find((d) => d.type === 'stick') || foundDevices[0];
@@ -126,6 +107,38 @@ export const AutoDiscoveryModal: React.FC<AutoDiscoveryModalProps> = ({
     onClose();
   };
 
+  const handleApplyManual = () => {
+    if (!stickIp.trim()) return;
+
+    const finalTvIp = tvIp.trim() || stickIp.trim();
+
+    const newDevices: FireTVDevice[] = [
+      {
+        id: 'firestick_4k',
+        name: 'Fire TV Stick 4K Max',
+        type: 'stick',
+        ip: stickIp.trim(),
+        port: 8008,
+        status: 'connected',
+        badge: `16GB (${stickIp.trim()})`,
+      },
+      {
+        id: 'toshiba_tv',
+        name: 'Toshiba Fire TV',
+        type: 'tv',
+        ip: finalTvIp,
+        port: 8008,
+        status: 'connected',
+        inputPort: 'HDMI 2',
+        badge: `TV & Sound (${finalTvIp})`,
+      },
+    ];
+
+    saveDevices(newDevices);
+    onApplyDevices(newDevices);
+    onClose();
+  };
+
   const handleBluetoothScan = async () => {
     const nav = navigator as any;
     if (!nav.bluetooth) {
@@ -151,7 +164,7 @@ export const AutoDiscoveryModal: React.FC<AutoDiscoveryModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-150">
-      <div className="w-full max-w-sm bg-slate-900 border border-slate-700 rounded-3xl p-5 shadow-2xl text-slate-100 flex flex-col gap-4">
+      <div className="w-full max-w-sm bg-slate-900 border border-slate-700 rounded-3xl p-5 shadow-2xl text-slate-100 flex flex-col gap-4 max-h-[92vh] overflow-y-auto">
         
         {/* Header */}
         <div className="flex items-center justify-between pb-2 border-b border-slate-800">
@@ -160,8 +173,8 @@ export const AutoDiscoveryModal: React.FC<AutoDiscoveryModalProps> = ({
               <Search className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-white">Auto-Detect Fire TVs</h3>
-              <p className="text-[11px] text-slate-400">Zero-config Wi-Fi network scanner</p>
+              <h3 className="text-sm font-bold text-white">Find Your Fire TVs</h3>
+              <p className="text-[11px] text-slate-400">Wi-Fi auto-scan & direct connect</p>
             </div>
           </div>
           <button
@@ -194,7 +207,7 @@ export const AutoDiscoveryModal: React.FC<AutoDiscoveryModalProps> = ({
           </button>
         </div>
 
-        {/* TAB 1: WI-FI AUTO SCAN */}
+        {/* TAB 1: WI-FI AUTO SCAN & FALLBACK */}
         {activeTab === 'wifi' && (
           <div className="space-y-3.5">
             {/* Animated Radar Visualizer */}
@@ -210,61 +223,132 @@ export const AutoDiscoveryModal: React.FC<AutoDiscoveryModalProps> = ({
 
               <div className="text-center px-4">
                 <p className="text-xs font-bold text-white">
-                  {isScanning ? 'Scanning Wi-Fi Subnet...' : `Found ${foundDevices.length} Fire TV Devices`}
+                  {isScanning
+                    ? 'Probing Home Wi-Fi Subnet...'
+                    : foundDevices.length > 0
+                    ? `Found ${foundDevices.length} Fire TV Devices!`
+                    : 'Scan Finished'}
                 </p>
                 <p className="text-[11px] text-slate-400 mt-0.5 font-mono">
                   {isScanning
-                    ? `Probing local IPs (${progress.scanned}/${progress.total})...`
-                    : 'Auto-detection completed!'}
+                    ? `Checking (${progress.scanned}/${progress.total})...`
+                    : foundDevices.length > 0
+                    ? 'Ready to connect'
+                    : 'Browser security restricted automatic Wi-Fi sweep'}
                 </p>
               </div>
             </div>
 
-            {/* List of Discovered Devices */}
-            <div className="space-y-2 max-h-44 overflow-y-auto">
-              {foundDevices.map((dev, idx) => (
-                <div
-                  key={idx}
-                  className="p-3 bg-slate-950 border border-slate-800 rounded-2xl flex items-center justify-between"
+            {/* If Devices were Found */}
+            {foundDevices.length > 0 ? (
+              <div className="space-y-2">
+                {foundDevices.map((dev, idx) => (
+                  <div
+                    key={idx}
+                    className="p-3 bg-slate-950 border border-slate-800 rounded-2xl flex items-center justify-between"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <span
+                        className={`w-2.5 h-2.5 rounded-full ${
+                          dev.type === 'stick' ? 'bg-cyan-400' : 'bg-amber-400'
+                        } animate-pulse`}
+                      />
+                      <div>
+                        <h4 className="text-xs font-bold text-white">{dev.name}</h4>
+                        <p className="text-[10px] text-slate-400 font-mono">
+                          IP: <strong className="text-cyan-300">{dev.ip}</strong> • {dev.responseTimeMs}ms
+                        </p>
+                      </div>
+                    </div>
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                  </div>
+                ))}
+
+                <button
+                  onClick={handleApplyDiscovered}
+                  className="w-full mt-2 py-3 rounded-2xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg active:scale-95 transition"
                 >
-                  <div className="flex items-center gap-2.5">
-                    <span
-                      className={`w-2.5 h-2.5 rounded-full ${
-                        dev.type === 'stick' ? 'bg-cyan-400' : 'bg-amber-400'
-                      } animate-pulse`}
-                    />
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Connect Both Devices</span>
+                </button>
+              </div>
+            ) : (
+              /* If browser security blocked silent probing: Offer 1-time real IP input */
+              !isScanning && (
+                <div className="space-y-3 pt-1">
+                  <div className="bg-amber-950/30 border border-amber-500/40 rounded-2xl p-3 text-[11px] text-amber-200">
+                    <p className="font-semibold text-white mb-1">
+                      Browser Security Notice:
+                    </p>
+                    <p className="text-slate-300 leading-snug">
+                      Phone browsers (Safari & Chrome) block websites from silently probing private Wi-Fi routers. Enter your TV's real IP once below:
+                    </p>
+                  </div>
+
+                  {/* 10-Second Guide on where to find IP on TV */}
+                  <div className="bg-slate-950 p-3 rounded-2xl border border-slate-800 text-[11px] text-slate-300 space-y-1">
+                    <p className="font-bold text-white flex items-center gap-1.5">
+                      <KeyRound className="w-3.5 h-3.5 text-cyan-400" />
+                      <span>Check on your TV screen (Takes 5 seconds):</span>
+                    </p>
+                    <p className="text-cyan-300 font-mono text-[10px] bg-slate-900 px-2 py-1 rounded">
+                      Settings &gt; My Fire TV &gt; About &gt; Network
+                    </p>
+                    <p className="text-slate-400 text-[10px]">
+                      Look for: <strong>IP Address (e.g. 192.168.1.XX)</strong>
+                    </p>
+                  </div>
+
+                  {/* Real IP Input Fields */}
+                  <div className="space-y-2">
                     <div>
-                      <h4 className="text-xs font-bold text-white">{dev.name}</h4>
-                      <p className="text-[10px] text-slate-400 font-mono">
-                        IP: <strong className="text-cyan-300">{dev.ip}</strong> • {dev.responseTimeMs}ms
-                      </p>
+                      <label className="block text-[11px] font-semibold text-cyan-400 mb-1">
+                        1. Fire TV Stick 4K Max IP:
+                      </label>
+                      <input
+                        type="text"
+                        value={stickIp}
+                        onChange={(e) => setStickIp(e.target.value)}
+                        placeholder="e.g. 192.168.1.45"
+                        className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white font-mono focus:outline-none focus:border-cyan-400"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-semibold text-amber-400 mb-1">
+                        2. Toshiba Fire TV IP:
+                      </label>
+                      <input
+                        type="text"
+                        value={tvIp}
+                        onChange={(e) => setTvIp(e.target.value)}
+                        placeholder="e.g. 192.168.1.42 (or same if single)"
+                        className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white font-mono focus:outline-none focus:border-amber-400"
+                      />
                     </div>
                   </div>
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+
+                  <div className="flex gap-2 pt-1">
+                    <button
+                      onClick={startScan}
+                      className="py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-300 text-xs font-semibold flex items-center justify-center gap-1.5 active:scale-95 transition"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      <span>Retry Scan</span>
+                    </button>
+
+                    <button
+                      onClick={handleApplyManual}
+                      disabled={!stickIp.trim()}
+                      className="flex-1 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 shadow transition active:scale-95 disabled:opacity-40"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Save Real IPs & Connect</span>
+                    </button>
+                  </div>
                 </div>
-              ))}
-            </div>
-
-            {/* Action Buttons */}
-            <div className="flex gap-2 pt-1">
-              <button
-                onClick={startScan}
-                disabled={isScanning}
-                className="py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-300 text-xs font-semibold flex items-center justify-center gap-1.5 transition active:scale-95"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${isScanning ? 'animate-spin' : ''}`} />
-                <span>Rescan</span>
-              </button>
-
-              <button
-                onClick={handleApply}
-                disabled={foundDevices.length === 0}
-                className="flex-1 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 shadow transition active:scale-95 disabled:opacity-50"
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>Auto-Connect Devices</span>
-              </button>
-            </div>
+              )
+            )}
           </div>
         )}
 
@@ -276,9 +360,9 @@ export const AutoDiscoveryModal: React.FC<AutoDiscoveryModalProps> = ({
             </div>
 
             <div>
-              <h4 className="text-sm font-bold text-white">Direct Bluetooth Pairing</h4>
+              <h4 className="text-sm font-bold text-white">Direct Bluetooth Connection</h4>
               <p className="text-[11px] text-slate-400 mt-1 max-w-xs">
-                No IP address needed! Connect your phone directly to Fire TV via Bluetooth.
+                No IP address or Wi-Fi configuration required. Pair directly with Fire TV over Bluetooth.
               </p>
             </div>
 
