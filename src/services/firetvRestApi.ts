@@ -16,17 +16,19 @@ export interface FireTVPairingState {
 }
 
 const API_KEY = '0987654321';
-const PAIRING_KEY_PREFIX = 'dremote_firetv_pair_';
+const PAIRING_KEY_PREFIX = 'dremote_firetv_pair_v6_';
 
 export function getStoredPairing(deviceId: 'firestick_4k' | 'toshiba_tv'): { ip: string; token?: string } | null {
-  if (typeof window === 'undefined') return null;
+  if (typeof window === 'undefined') {
+    return { ip: deviceId === 'toshiba_tv' ? '192.168.1.166' : '192.168.1.156' };
+  }
   try {
     const raw = localStorage.getItem(`${PAIRING_KEY_PREFIX}${deviceId}`);
     if (raw) return JSON.parse(raw);
   } catch {
     // Storage read error
   }
-  return null;
+  return { ip: deviceId === 'toshiba_tv' ? '192.168.1.166' : '192.168.1.156' };
 }
 
 export function saveStoredPairing(deviceId: 'firestick_4k' | 'toshiba_tv', ip: string, token?: string) {
