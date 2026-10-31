@@ -5,36 +5,32 @@
 
 import React from 'react';
 import { PWAInstallButton } from './PWAInstallButton';
-import { Volume2, VolumeX, Vibrate, RefreshCw, Settings, FileText, Zap } from 'lucide-react';
+import { Volume2, VolumeX, RefreshCw, Settings } from 'lucide-react';
 
 interface CleanHeaderBarProps {
   soundEnabled: boolean;
   onToggleSound: () => void;
-  hapticsEnabled: boolean;
-  onToggleHaptics: () => void;
+  hapticsEnabled?: boolean;
+  onToggleHaptics?: () => void;
   onRefreshWifi: () => void;
   isScanning: boolean;
   onOpenSettings: () => void;
-  onOpenWizard: () => void;
+  onOpenWizard?: () => void;
   bridgeConnected?: boolean;
 }
 
 export const CleanHeaderBar: React.FC<CleanHeaderBarProps> = ({
   soundEnabled,
   onToggleSound,
-  hapticsEnabled,
-  onToggleHaptics,
   onRefreshWifi,
   isScanning,
   onOpenSettings,
-  onOpenWizard,
-  bridgeConnected = false,
 }) => {
   return (
-    <header className="w-full bg-slate-900/90 backdrop-blur-md border-b border-slate-800/80 sticky top-0 z-30 px-4 py-2.5">
+    <header className="w-full bg-slate-900/95 backdrop-blur-md border-b border-slate-800/80 sticky top-0 z-30 px-3 py-2.5">
       <div className="max-w-md mx-auto flex items-center justify-between gap-2">
         {/* Brand */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-shrink-0">
           <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-cyan-500 via-blue-600 to-amber-500 p-0.5 shadow flex items-center justify-center">
             <div className="w-full h-full bg-slate-950 rounded-[10px] flex items-center justify-center">
               <span className="font-black text-xs bg-gradient-to-r from-cyan-400 to-amber-400 bg-clip-text text-transparent">
@@ -42,71 +38,51 @@ export const CleanHeaderBar: React.FC<CleanHeaderBarProps> = ({
               </span>
             </div>
           </div>
-          <div>
+          <div className="flex flex-col">
             <div className="flex items-center gap-1.5">
-              <h1 className="text-sm font-bold text-white tracking-tight">DRemote</h1>
-              <span className="text-[10px] bg-cyan-950 border border-cyan-800 text-cyan-400 px-1.5 py-0.2 rounded-full font-semibold">
-                Dual FireTV
+              <h1 className="text-sm font-bold text-white tracking-tight leading-none">DRemote</h1>
+              <span className="text-[9px] bg-cyan-950/80 border border-cyan-800 text-cyan-400 px-1.5 py-0.5 rounded-full font-semibold leading-none">
+                FireTV
               </span>
             </div>
           </div>
         </div>
 
-        {/* Action Controls */}
-        <div className="flex items-center gap-1.5">
-          {/* Quick Guide & Bridge Wizard Button */}
-          <button
-            onClick={onOpenWizard}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-cyan-950 to-blue-950 hover:from-cyan-900 hover:to-blue-900 text-cyan-300 border border-cyan-700/50 active:scale-95 transition text-xs font-medium shadow-sm"
-            title="Download AI Migration Guide & Bridge Setup"
-          >
-            <Zap className={`w-3.5 h-3.5 ${bridgeConnected ? 'text-emerald-400' : 'text-amber-400'}`} />
-            <span className="hidden sm:inline">Guide &amp; Bridge</span>
-            <span className="sm:hidden font-mono text-[10px]">Guide</span>
-          </button>
-
-          {/* PWA Install */}
+        {/* Action Controls: Focused, Clean, Install App Made First */}
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          {/* 1. INSTALL APP BUTTON: Prominent & First */}
           <PWAInstallButton />
 
-          {/* Wi-Fi Scan / Refresh */}
+          {/* 2. WI-FI SCAN / REFRESH */}
           <button
             onClick={onRefreshWifi}
             disabled={isScanning}
             className="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-750 text-slate-300 border border-slate-700/60 active:scale-95 transition"
             title="Scan Wi-Fi for Fire TVs"
           >
-            <RefreshCw className={`w-3.5 h-3.5 text-cyan-400 ${isScanning ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-4 h-4 text-cyan-400 ${isScanning ? 'animate-spin' : ''}`} />
           </button>
 
-          {/* Sound Toggle */}
+          {/* 3. SOUND TOGGLE: Defaults to Muted (VolumeX) */}
           <button
             onClick={onToggleSound}
             className="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-750 text-slate-300 border border-slate-700/60 active:scale-95 transition"
-            title={soundEnabled ? 'Click Sound: On' : 'Click Sound: Off'}
+            title={soundEnabled ? 'Click Sound: On' : 'Click Sound: Muted (Default)'}
           >
             {soundEnabled ? (
-              <Volume2 className="w-3.5 h-3.5 text-cyan-400" />
+              <Volume2 className="w-4 h-4 text-cyan-400" />
             ) : (
-              <VolumeX className="w-3.5 h-3.5 text-slate-500" />
+              <VolumeX className="w-4 h-4 text-slate-500" />
             )}
           </button>
 
-          {/* Vibration Toggle */}
-          <button
-            onClick={onToggleHaptics}
-            className="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-750 text-slate-300 border border-slate-700/60 active:scale-95 transition"
-            title={hapticsEnabled ? 'Vibration: On' : 'Vibration: Off'}
-          >
-            <Vibrate className={`w-3.5 h-3.5 ${hapticsEnabled ? 'text-amber-400' : 'text-slate-500'}`} />
-          </button>
-
-          {/* Settings / Manual IP */}
+          {/* 4. SETTINGS & BRIDGE OPTIONS */}
           <button
             onClick={onOpenSettings}
             className="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-750 text-slate-300 border border-slate-700/60 active:scale-95 transition"
-            title="Device Settings"
+            title="Device & Network Settings"
           >
-            <Settings className="w-3.5 h-3.5 text-slate-400" />
+            <Settings className="w-4 h-4 text-slate-400" />
           </button>
         </div>
       </div>

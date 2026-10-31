@@ -48,8 +48,8 @@ export default function App() {
   const [isWizardOpen, setIsWizardOpen] = useState(false);
   const [pairingTargetId, setPairingTargetId] = useState<'firestick_4k' | 'toshiba_tv'>('firestick_4k');
 
-  // Preferences
-  const [soundEnabled, setSoundEnabled] = useState(true);
+  // Preferences (no sound by default)
+  const [soundEnabled, setSoundEnabled] = useState(false);
   const [hapticsEnabled, setHapticsEnabled] = useState(true);
 
   // Bridge Status & Latency

@@ -13,7 +13,7 @@ export default defineConfig(() => {
         registerType: 'autoUpdate',
         includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'icon.svg'],
         manifest: {
-          id: '/',
+          id: '/?source=pwa',
           name: 'DRemote - Dual Fire TV Unified Remote',
           short_name: 'DRemote',
           description: 'Unified PWA remote control to seamlessly control your Toshiba Fire TV and Fire TV Stick 4K Max simultaneously without swapping remotes.',
@@ -29,6 +29,12 @@ export default defineConfig(() => {
               sizes: '192x192',
               type: 'image/png',
               purpose: 'any',
+            },
+            {
+              src: '/pwa-maskable-192x192.png',
+              sizes: '192x192',
+              type: 'image/png',
+              purpose: 'maskable',
             },
             {
               src: '/pwa-512x512.png',

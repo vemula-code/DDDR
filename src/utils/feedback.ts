@@ -27,7 +27,7 @@ function getAudioContext(): AudioContext | null {
 /**
  * Play a short, crisp tactile click sound
  */
-export function playClickSound(soundType: 'click' | 'select' | 'power' | 'macro' = 'click', enabled = true) {
+export function playClickSound(soundType: 'click' | 'select' | 'power' | 'macro' = 'click', enabled = false) {
   if (!enabled) return;
   try {
     const ctx = getAudioContext();
