@@ -2,32 +2,23 @@
 /**
  * DRemote - Dual Fire TV Local Wi-Fi Bridge (Node.js)
  * 
- * Why this bridge is needed:
- * Web browsers on HTTPS (like Vercel) block direct connections to home IP addresses
- * due to browser Mixed Content & Private Network Access security rules.
- * 
- * This lightweight bridge runs on any computer/laptop on your home Wi-Fi and routes
- * remote commands from DRemote directly into your Firestick 4K Max and Toshiba TV via ADB / TCP!
- * 
- * Usage:
- *   node dremote-bridge.js [firestick_ip] [toshiba_tv_ip]
- * 
- * Example:
- *   node dremote-bridge.js 192.168.1.106 192.168.1.105
+ * Pre-configured for your network:
+ *   Toshiba Fire TV:         192.168.1.166:5555
+ *   Fire TV Stick 4K Max:    192.168.1.156:5555 (HDMI 3)
  */
 
 const http = require('http');
 const { exec } = require('child_process');
 
 const PORT = process.env.BRIDGE_PORT || 8080;
-const stickIp = process.argv[2] || process.env.FIRESTICK_IP || '192.168.1.106';
-const tvIp = process.argv[3] || process.env.TOSHIBA_TV_IP || '192.168.1.105';
+const stickIp = process.argv[2] || process.env.FIRESTICK_IP || '192.168.1.156';
+const tvIp = process.argv[3] || process.env.TOSHIBA_TV_IP || '192.168.1.166';
 
 console.log('========================================================');
 console.log('  ⚡ DRemote Dual Fire TV Local Bridge Server (Node.js)');
 console.log(`  Listening on http://0.0.0.0:${PORT}`);
-console.log(`  Target 1 (Firestick 4K Max): ${stickIp}:5555`);
-console.log(`  Target 2 (Toshiba Fire TV):  ${tvIp}:5555`);
+console.log(`  Target 1 (Toshiba Fire TV):  ${tvIp}:5555`);
+console.log(`  Target 2 (Firestick 4K Max): ${stickIp}:5555 (HDMI 3)`);
 console.log('========================================================\n');
 
 // Attempt ADB connect on startup
@@ -41,8 +32,8 @@ function connectAdb(ip) {
   });
 }
 
-connectAdb(stickIp);
 connectAdb(tvIp);
+connectAdb(stickIp);
 
 // Keycode mapping for Android Fire TV
 const KEYCODES = {
@@ -66,7 +57,9 @@ const KEYCODES = {
   power: 26,
   source: 178,
   hdmi2: 178,
+  hdmi3: 178,
   input_hdmi2: 178,
+  input_hdmi3: 178,
 };
 
 // Create HTTP API server with CORS enabled for DRemote PWA
@@ -99,9 +92,9 @@ const server = http.createServer((req, res) => {
         const action = (data.action || data.key || '').toLowerCase();
         const code = KEYCODES[action] || data.keycode;
 
-        if (action === 'input_hdmi2' || action === 'hdmi2') {
-          // Direct Toshiba TV HDMI 2 Input Switch Intent
-          const cmd = `adb -s ${targetIp}:5555 shell am start -a android.intent.action.VIEW -d "content://android.media.tv/passthrough/com.amazon.tv.ime/.tvinput.TvInputService%2FHW2"`;
+        if (action === 'input_hdmi3' || action === 'hdmi3' || action === 'input_hdmi2') {
+          // Direct Toshiba TV HDMI 3 Input Switch Intent
+          const cmd = `adb -s ${targetIp}:5555 shell am start -a android.intent.action.VIEW -d "content://android.media.tv/passthrough/com.amazon.tv.ime/.tvinput.TvInputService%2FHW3"`;
           exec(cmd, (err, stdout, stderr) => {
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ success: !err, details: stdout.trim() }));

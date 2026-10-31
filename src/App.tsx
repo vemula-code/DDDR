@@ -58,7 +58,7 @@ export default function App() {
 
   // TV State simulation
   const [tvVolume, setTvVolume] = useState(20);
-  const [tvCurrentInput, setTvCurrentInput] = useState('HDMI 2');
+  const [tvCurrentInput, setTvCurrentInput] = useState('HDMI 3');
 
   // Command Telemetry & Logs
   const [commandLogs, setCommandLogs] = useState<CommandLogEntry[]>([]);
@@ -108,7 +108,8 @@ export default function App() {
       case 'VOLUME_DOWN': return 'volume_down';
       case 'VOLUME_MUTE': return 'mute';
       case 'POWER': return 'power';
-      case 'INPUT_HDMI2': return 'source';
+      case 'INPUT_HDMI2':
+      case 'INPUT_HDMI3': return 'source';
       default: return cmd.toLowerCase();
     }
   };
@@ -127,8 +128,8 @@ export default function App() {
       setTvVolume((v) => Math.min(100, v + 2));
     } else if (cmd === 'VOLUME_DOWN') {
       setTvVolume((v) => Math.max(0, v - 2));
-    } else if (cmd === 'INPUT_HDMI2') {
-      setTvCurrentInput('HDMI 2');
+    } else if (cmd === 'INPUT_HDMI3' || cmd === 'INPUT_HDMI2') {
+      setTvCurrentInput('HDMI 3');
     }
 
     const action = mapCommandToAction(cmd);
@@ -173,11 +174,11 @@ export default function App() {
   const legacyDevicesMap: Record<TargetDeviceType, DeviceState> = {
     firestick_4k: {
       ...INITIAL_DEVICES.firestick_4k,
-      ip: devices.find((d) => d.id === 'firestick_4k')?.ip || '192.168.1.106',
+      ip: devices.find((d) => d.id === 'firestick_4k')?.ip || '192.168.1.156',
     },
     toshiba_tv: {
       ...INITIAL_DEVICES.toshiba_tv,
-      ip: devices.find((d) => d.id === 'toshiba_tv')?.ip || '192.168.1.105',
+      ip: devices.find((d) => d.id === 'toshiba_tv')?.ip || '192.168.1.166',
     },
   };
 

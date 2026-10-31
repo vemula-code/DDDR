@@ -3,10 +3,9 @@
 DRemote - Dual Fire TV Local Bridge Server (Python 3)
 Connects your web browser remote to your Toshiba Fire TV and Fire TV Stick 4K Max over ADB.
 
-Requirements:
-  1. Python 3.7+
-  2. pip install websockets
-  3. ADB installed (Android Debug Bridge, e.g. 'sudo apt install adb' or Android platform-tools)
+Pre-configured for your network:
+  Toshiba Fire TV:         192.168.1.166:5555
+  Fire TV Stick 4K Max:    192.168.1.156:5555 (HDMI 3)
 """
 
 import asyncio
@@ -25,13 +24,17 @@ except ImportError:
 PORT = 8080
 HOST = "0.0.0.0"
 
+DEFAULT_STICK_IP = "192.168.1.156"
+DEFAULT_TV_IP = "192.168.1.166"
+
 KEY_MAP = {
     "UP": 19, "DOWN": 20, "LEFT": 21, "RIGHT": 22, "SELECT": 66,
     "BACK": 4, "HOME": 3, "MENU": 82, "GUIDE": 172,
     "PLAY_PAUSE": 85, "REWIND": 89, "FAST_FORWARD": 90,
     "VOLUME_UP": 24, "VOLUME_DOWN": 25, "VOLUME_MUTE": 164,
     "POWER": 26, "TV_POWER": 26, "STICK_POWER": 26,
-    "TV_INPUT": 178, "INPUT_HDMI2": 178, "ENTER": 66, "BACKSPACE": 67,
+    "TV_INPUT": 178, "INPUT_HDMI2": 178, "INPUT_HDMI3": 178,
+    "ENTER": 66, "BACKSPACE": 67,
 }
 
 CONNECTED_DEVICES = set()
@@ -70,7 +73,9 @@ async def handler(websocket):
         "type": "handshake",
         "status": "connected",
         "adb": check_adb(),
-        "bridge": "DRemote Python Bridge v3",
+        "bridge": "DRemote Python Bridge v4",
+        "stickIp": DEFAULT_STICK_IP,
+        "tvIp": DEFAULT_TV_IP,
     }))
 
     async for message in websocket:
@@ -86,23 +91,19 @@ async def handler(websocket):
             continue
 
         target = data.get("target", "firestick_4k")
-        ip = data.get("ip")
+        ip = data.get("ip") or (DEFAULT_TV_IP if target == "toshiba_tv" else DEFAULT_STICK_IP)
         key = data.get("key")
         keycode = data.get("keycode") or KEY_MAP.get(key, 0)
         text = data.get("text")
         package_name = data.get("packageName")
 
-        if not ip:
-            await websocket.send(json.dumps({"type": "error", "message": "Missing device IP"}))
-            continue
-
         if text:
             success, details = run_adb(ip, ["shell", "input", "text", text])
         elif package_name:
             success, details = run_adb(ip, ["shell", "monkey", "-p", package_name, "1"])
-        elif key == "INPUT_HDMI2":
-            # Direct Toshiba TV HDMI 2 Input Switch Intent
-            success, details = run_adb(ip, ["shell", "am", "start", "-a", "android.intent.action.VIEW", "-d", "content://android.media.tv/passthrough/com.amazon.tv.ime/.tvinput.TvInputService%2FHW2"])
+        elif key in ("INPUT_HDMI3", "INPUT_HDMI2"):
+            # Direct Toshiba TV HDMI 3 Input Switch Intent
+            success, details = run_adb(ip, ["shell", "am", "start", "-a", "android.intent.action.VIEW", "-d", "content://android.media.tv/passthrough/com.amazon.tv.ime/.tvinput.TvInputService%2FHW3"])
             if not success:
                 success, details = run_adb(ip, ["shell", "input", "keyevent", "178"])
         elif keycode:
@@ -120,10 +121,17 @@ async def handler(websocket):
 
 async def main():
     print("=" * 60)
-    print(f"  ⚡ DRemote Fire TV Local WebSocket Bridge v3")
+    print(f"  ⚡ DRemote Fire TV Local WebSocket Bridge v4")
     print(f"  Listening on ws://{HOST}:{PORT}")
+    print(f"  Target 1: Toshiba Fire TV ({DEFAULT_TV_IP}:5555)")
+    print(f"  Target 2: Fire TV Stick 4K Max ({DEFAULT_STICK_IP}:5555) [HDMI 3]")
     print(f"  ADB Installed: {'YES ✅' if check_adb() else 'NO ❌ (Please install Android Platform-Tools)'}")
     print("=" * 60)
+
+    # Initial connection attempt on bridge startup
+    connect_adb(DEFAULT_TV_IP)
+    connect_adb(DEFAULT_STICK_IP)
+
     async with websockets.serve(handler, HOST, PORT):
         await asyncio.Future()
 

@@ -204,11 +204,13 @@ app.get('/api/bridge/scan', async (req, res) => {
 
 // 4. Command dispatch over local ADB
 app.post('/api/bridge/command', (req, res) => {
-  const { ip, keycode, text, packageName } = req.body;
+  const { ip, keycode, text, packageName, key } = req.body;
   if (!ip) return res.status(400).json({ success: false, error: 'Missing device IP' });
 
   let adbCmd = '';
-  if (text) {
+  if (key === 'INPUT_HDMI3' || key === 'INPUT_HDMI2') {
+    adbCmd = `adb -s ${ip}:5555 shell am start -a android.intent.action.VIEW -d "content://android.media.tv/passthrough/com.amazon.tv.ime/.tvinput.TvInputService%2FHW3"`;
+  } else if (text) {
     adbCmd = `adb -s ${ip}:5555 shell input text "${text.replace(/"/g, '\\"')}"`;
   } else if (packageName) {
     adbCmd = `adb -s ${ip}:5555 shell monkey -p ${packageName} 1`;

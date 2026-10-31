@@ -35,6 +35,7 @@ export const KEYCODE_MAP: Record<string, number> = {
   STICK_POWER: 26,
   TV_INPUT: 178,
   INPUT_HDMI2: 178,
+  INPUT_HDMI3: 178,
   ENTER: 66,
   BACKSPACE: 67,
 };

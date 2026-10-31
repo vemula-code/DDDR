@@ -17,27 +17,27 @@ export interface FireTVDevice {
   lastPingMs?: number;
 }
 
-const STORAGE_KEY = 'dremote_discovered_devices_v4';
+const STORAGE_KEY = 'dremote_discovered_devices_v6';
 
 export const DEFAULT_DEVICES: FireTVDevice[] = [
   {
     id: 'firestick_4k',
     name: 'Fire TV Stick 4K Max',
     type: 'stick',
-    ip: '192.168.1.106',
+    ip: '192.168.1.156',
     port: 8008,
-    status: 'searching',
-    badge: '16GB (HDMI 2)',
+    status: 'connected',
+    badge: '16GB (HDMI 3)',
   },
   {
     id: 'toshiba_tv',
     name: 'Toshiba Fire TV',
     type: 'tv',
-    ip: '192.168.1.105',
+    ip: '192.168.1.166',
     port: 8008,
-    status: 'searching',
-    inputPort: 'HDMI 2',
-    badge: 'TV & Sound',
+    status: 'connected',
+    inputPort: 'HDMI 3',
+    badge: 'TV Display',
   },
 ];
 

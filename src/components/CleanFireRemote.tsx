@@ -60,7 +60,7 @@ export const CleanFireRemote: React.FC<CleanFireRemoteProps> = ({
   onOpenKeyboard,
   soundEnabled,
   hapticsEnabled,
-  tvCurrentInput = 'HDMI 2',
+  tvCurrentInput = 'HDMI 3',
   tvVolume,
   onOpenPairing,
   onOpenAutoDetect,
@@ -107,7 +107,7 @@ export const CleanFireRemote: React.FC<CleanFireRemoteProps> = ({
             <span className="text-xs sm:text-sm tracking-tight">Fire TV Stick 4K</span>
           </div>
           <span className={`text-[10px] mt-0.5 ${isStick ? 'text-cyan-100' : 'text-slate-500'}`}>
-            Fast 16GB (HDMI 2)
+            Fast 16GB (HDMI 3)
           </span>
         </button>
 
@@ -170,12 +170,12 @@ export const CleanFireRemote: React.FC<CleanFireRemoteProps> = ({
         <div className="w-full flex items-center justify-between pb-3">
           {/* Quick TV Input Button */}
           <button
-            onClick={() => pressBtn('INPUT_HDMI2', 'Switched to HDMI 2 (Stick)', 'toshiba_tv')}
+            onClick={() => pressBtn('INPUT_HDMI3', 'Switched to HDMI 3 (Stick)', 'toshiba_tv')}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 active:scale-95 transition shadow-sm"
-            title="Switch TV Input to HDMI 2 for Firestick 4K Max"
+            title="Switch TV Input to HDMI 3 for Firestick 4K Max"
           >
             <Tv className="w-3.5 h-3.5 text-amber-400" />
-            <span>HDMI 2</span>
+            <span>HDMI 3</span>
           </button>
 
           {/* Cyan Alexa Status Glow Ring */}
@@ -207,7 +207,7 @@ export const CleanFireRemote: React.FC<CleanFireRemoteProps> = ({
                 <span className="w-2 h-2 rounded-full bg-amber-400" />
                 Watch Fire TV Stick 4K?
               </p>
-              <p className="text-[10px] text-slate-400">Switches Toshiba TV input to HDMI 2</p>
+              <p className="text-[10px] text-slate-400">Switches Toshiba TV input to HDMI 3</p>
             </div>
             <div className="flex items-center gap-1.5">
               <button
@@ -219,12 +219,12 @@ export const CleanFireRemote: React.FC<CleanFireRemoteProps> = ({
               </button>
               <button
                 onClick={() => {
-                  pressBtn('INPUT_HDMI2', 'Switched to HDMI 2 (4K Max)', 'toshiba_tv');
+                  pressBtn('INPUT_HDMI3', 'Switched to HDMI 3 (4K Max)', 'toshiba_tv');
                   onSelectDevice('firestick_4k');
                 }}
                 className="px-3 py-1.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs flex items-center gap-1 shadow active:scale-95 transition"
               >
-                <span>HDMI 2</span>
+                <span>HDMI 3</span>
               </button>
             </div>
           </div>
