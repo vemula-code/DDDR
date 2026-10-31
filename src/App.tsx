@@ -6,19 +6,20 @@
 import React, { useState, useEffect } from 'react';
 import {
   FireTVDevice,
-  DEFAULT_DEVICES,
   getSavedDevices,
   saveDevices,
   autoDiscoverWifiDevices,
 } from './services/wifiDiscovery';
 import {
-  sendFireTVKey,
   getStoredPairing,
   saveStoredPairing,
   launchStreamingApp,
   pingFireTV,
-  wakeFireTV,
 } from './services/firetvRestApi';
+import {
+  bridgeManager,
+  ConnectionStatus,
+} from './services/bridgeClient';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
 import { CleanHeaderBar } from './components/CleanHeaderBar';
 import { CleanFireRemote } from './components/CleanFireRemote';
@@ -26,9 +27,10 @@ import { SimpleKeyboardModal } from './components/SimpleKeyboardModal';
 import { FireTVPairingModal } from './components/FireTVPairingModal';
 import { AutoDiscoveryModal } from './components/AutoDiscoveryModal';
 import { NetworkConfigModal } from './components/NetworkConfigModal';
+import { FireTVConnectionWizard } from './components/FireTVConnectionWizard';
 import { DeviceState, CommandLogEntry, TargetDeviceType } from './types/remote';
 import { INITIAL_DEVICES } from './services/remoteBridge';
-import { WifiOff, Sparkles, CheckCircle2 } from 'lucide-react';
+import { WifiOff } from 'lucide-react';
 
 export default function App() {
   const isOnline = useOnlineStatus();
@@ -43,11 +45,16 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isPairingModalOpen, setIsPairingModalOpen] = useState(false);
   const [isAutoDiscoveryOpen, setIsAutoDiscoveryOpen] = useState(false);
+  const [isWizardOpen, setIsWizardOpen] = useState(false);
   const [pairingTargetId, setPairingTargetId] = useState<'firestick_4k' | 'toshiba_tv'>('firestick_4k');
 
   // Preferences
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [hapticsEnabled, setHapticsEnabled] = useState(true);
+
+  // Bridge Status & Latency
+  const [bridgeStatus, setBridgeStatus] = useState<ConnectionStatus>('disconnected');
+  const [bridgeLatency, setBridgeLatency] = useState(0);
 
   // TV State simulation
   const [tvVolume, setTvVolume] = useState(20);
@@ -57,11 +64,19 @@ export default function App() {
   const [commandLogs, setCommandLogs] = useState<CommandLogEntry[]>([]);
   const [isTestingPing, setIsTestingPing] = useState(false);
 
+  // Subscribe to Bridge Manager
+  useEffect(() => {
+    const unsub = bridgeManager.addStatusListener((status, latency) => {
+      setBridgeStatus(status);
+      if (latency !== undefined) setBridgeLatency(latency);
+    });
+    return unsub;
+  }, []);
+
   // Auto-discover on mount
   useEffect(() => {
     setIsScanningWifi(true);
     autoDiscoverWifiDevices().then((discovered) => {
-      // Sync with any stored user pairings
       const synced = discovered.map((d) => {
         const stored = getStoredPairing(d.id);
         return stored ? { ...d, ip: stored.ip } : d;
@@ -117,15 +132,24 @@ export default function App() {
     }
 
     const action = mapCommandToAction(cmd);
-    const storedPair = getStoredPairing(targetId);
+    let appPackage: string | undefined;
 
-    // If launching an app, call app launcher
     if (cmd === 'LAUNCH_APP') {
+      if (label.includes('Netflix')) appPackage = 'com.netflix.ninja';
+      else if (label.includes('Prime Video')) appPackage = 'com.amazon.amazonvideo.livingroom';
+      else if (label.includes('YouTube')) appPackage = 'com.amazon.firetv.youtube';
+      else if (label.includes('Disney+')) appPackage = 'com.disney.disneyplus';
       await launchStreamingApp(targetDevice.ip, label.replace('Launched ', ''));
-    } else {
-      // Send key over REST / Wi-Fi
-      await sendFireTVKey(targetDevice.ip, storedPair?.token, action);
     }
+
+    // Dispatch via Bridge Client (WebSocket / ADB / DIAL / Express proxy)
+    const result = await bridgeManager.sendCommand({
+      target: targetId,
+      ip: targetDevice.ip,
+      key: cmd,
+      packageName: appPackage,
+      text: cmd === 'TEXT_INPUT' ? label.replace('Searched: "', '').replace('"', '') : undefined,
+    });
 
     // Record telemetry log
     const now = new Date();
@@ -137,10 +161,10 @@ export default function App() {
       label,
       targetDevice: targetId,
       targetDeviceName: targetDevice.name,
-      protocol: 'http_rest',
-      status: 'success',
-      latencyMs: Math.floor(Math.random() * 15) + 10,
-      payload: { action, ip: targetDevice.ip, token: storedPair?.token ? 'present' : 'none' },
+      protocol: bridgeStatus === 'connected' ? 'adb_bridge' : 'direct_wifi',
+      status: result.success ? 'success' : 'failed',
+      latencyMs: result.latencyMs || Math.floor(Math.random() * 10) + 5,
+      payload: { action, ip: targetDevice.ip, error: result.error },
     };
     setCommandLogs((prev) => [logEntry, ...prev.slice(0, 30)]);
   };
@@ -172,7 +196,7 @@ export default function App() {
     setIsTestingPing(true);
     const dev = devices.find((d) => d.id === id);
     if (dev) {
-      const res = await pingFireTV(dev.ip);
+      const res = await bridgeManager.testPing(dev.ip);
       handleSendCommand('PING', res.alive ? `Ping OK (${res.latencyMs}ms)` : `No response from ${dev.ip}`, id);
     }
     setIsTestingPing(false);
@@ -196,7 +220,6 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-cyan-500 pb-10">
-      
       {/* 1. CLEAN TOP HEADER */}
       <CleanHeaderBar
         soundEnabled={soundEnabled}
@@ -206,6 +229,8 @@ export default function App() {
         onRefreshWifi={handleRefreshWifi}
         isScanning={isScanningWifi}
         onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenWizard={() => setIsWizardOpen(true)}
+        bridgeConnected={bridgeStatus === 'connected'}
       />
 
       {/* 2. MAIN USER INTERFACE (Authentic, simple Fire TV remote) */}
@@ -218,6 +243,9 @@ export default function App() {
           onOpenKeyboard={() => setIsKeyboardOpen(true)}
           onOpenPairing={handleOpenPairingModal}
           onOpenAutoDetect={() => setIsAutoDiscoveryOpen(true)}
+          onOpenWizard={() => setIsWizardOpen(true)}
+          bridgeStatus={bridgeStatus}
+          bridgeLatency={bridgeLatency}
           soundEnabled={soundEnabled}
           hapticsEnabled={hapticsEnabled}
           tvCurrentInput={tvCurrentInput}
@@ -225,7 +253,7 @@ export default function App() {
         />
       </main>
 
-      {/* 3. AUTO-DISCOVERY WI-FI & BLUETOOTH RADAR MODAL */}
+      {/* 3. AUTO-DISCOVERY WI-FI & RADAR MODAL */}
       <AutoDiscoveryModal
         isOpen={isAutoDiscoveryOpen}
         onClose={() => setIsAutoDiscoveryOpen(false)}
@@ -234,7 +262,14 @@ export default function App() {
         }}
       />
 
-      {/* 4. FIRE TV PAIRING & PIN CODE MODAL */}
+      {/* 4. FIRE TV CONNECTION WIZARD & AI GUIDE DOWNLOAD MODAL */}
+      <FireTVConnectionWizard
+        isOpen={isWizardOpen}
+        onClose={() => setIsWizardOpen(false)}
+        devices={devices}
+      />
+
+      {/* 5. FIRE TV PAIRING & PIN CODE MODAL */}
       <FireTVPairingModal
         isOpen={isPairingModalOpen}
         onClose={() => setIsPairingModalOpen(false)}
@@ -244,7 +279,7 @@ export default function App() {
         onSaveIp={handleSavePairedDevice}
       />
 
-      {/* 4. SIMPLE SEARCH KEYBOARD & VOICE MODAL */}
+      {/* 6. SIMPLE SEARCH KEYBOARD & VOICE MODAL */}
       <SimpleKeyboardModal
         isOpen={isKeyboardOpen}
         onClose={() => setIsKeyboardOpen(false)}
@@ -252,7 +287,7 @@ export default function App() {
         onSendKey={(k) => handleSendCommand(k, `Key: ${k}`, 'firestick_4k')}
       />
 
-      {/* 5. ADVANCED SETTINGS MODAL */}
+      {/* 7. ADVANCED SETTINGS MODAL */}
       <NetworkConfigModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
@@ -264,14 +299,13 @@ export default function App() {
         isTestingPing={isTestingPing}
       />
 
-      {/* 6. OFFLINE INDICATOR */}
+      {/* 8. OFFLINE INDICATOR */}
       {!isOnline && (
         <div className="fixed bottom-4 left-4 z-50 flex items-center gap-2 rounded-xl bg-amber-500 px-3 py-1.5 text-xs font-semibold text-slate-950 shadow-lg">
           <WifiOff className="w-4 h-4 text-slate-950" />
           <span>Offline — Using cached Wi-Fi controllers.</span>
         </div>
       )}
-
     </div>
   );
 }

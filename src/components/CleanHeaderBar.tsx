@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { PWAInstallButton } from './PWAInstallButton';
-import { Wifi, Volume2, VolumeX, Vibrate, RefreshCw, Settings, CheckCircle2 } from 'lucide-react';
+import { Volume2, VolumeX, Vibrate, RefreshCw, Settings, FileText, Zap } from 'lucide-react';
 
 interface CleanHeaderBarProps {
   soundEnabled: boolean;
@@ -15,6 +15,8 @@ interface CleanHeaderBarProps {
   onRefreshWifi: () => void;
   isScanning: boolean;
   onOpenSettings: () => void;
+  onOpenWizard: () => void;
+  bridgeConnected?: boolean;
 }
 
 export const CleanHeaderBar: React.FC<CleanHeaderBarProps> = ({
@@ -25,11 +27,12 @@ export const CleanHeaderBar: React.FC<CleanHeaderBarProps> = ({
   onRefreshWifi,
   isScanning,
   onOpenSettings,
+  onOpenWizard,
+  bridgeConnected = false,
 }) => {
   return (
     <header className="w-full bg-slate-900/90 backdrop-blur-md border-b border-slate-800/80 sticky top-0 z-30 px-4 py-2.5">
       <div className="max-w-md mx-auto flex items-center justify-between gap-2">
-        
         {/* Brand */}
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-cyan-500 via-blue-600 to-amber-500 p-0.5 shadow flex items-center justify-center">
@@ -51,6 +54,17 @@ export const CleanHeaderBar: React.FC<CleanHeaderBarProps> = ({
 
         {/* Action Controls */}
         <div className="flex items-center gap-1.5">
+          {/* Quick Guide & Bridge Wizard Button */}
+          <button
+            onClick={onOpenWizard}
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-cyan-950 to-blue-950 hover:from-cyan-900 hover:to-blue-900 text-cyan-300 border border-cyan-700/50 active:scale-95 transition text-xs font-medium shadow-sm"
+            title="Download AI Migration Guide & Bridge Setup"
+          >
+            <Zap className={`w-3.5 h-3.5 ${bridgeConnected ? 'text-emerald-400' : 'text-amber-400'}`} />
+            <span className="hidden sm:inline">Guide &amp; Bridge</span>
+            <span className="sm:hidden font-mono text-[10px]">Guide</span>
+          </button>
+
           {/* PWA Install */}
           <PWAInstallButton />
 
@@ -70,7 +84,11 @@ export const CleanHeaderBar: React.FC<CleanHeaderBarProps> = ({
             className="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-750 text-slate-300 border border-slate-700/60 active:scale-95 transition"
             title={soundEnabled ? 'Click Sound: On' : 'Click Sound: Off'}
           >
-            {soundEnabled ? <Volume2 className="w-3.5 h-3.5 text-cyan-400" /> : <VolumeX className="w-3.5 h-3.5 text-slate-500" />}
+            {soundEnabled ? (
+              <Volume2 className="w-3.5 h-3.5 text-cyan-400" />
+            ) : (
+              <VolumeX className="w-3.5 h-3.5 text-slate-500" />
+            )}
           </button>
 
           {/* Vibration Toggle */}
@@ -82,7 +100,7 @@ export const CleanHeaderBar: React.FC<CleanHeaderBarProps> = ({
             <Vibrate className={`w-3.5 h-3.5 ${hapticsEnabled ? 'text-amber-400' : 'text-slate-500'}`} />
           </button>
 
-          {/* Settings / Manual IP if needed */}
+          {/* Settings / Manual IP */}
           <button
             onClick={onOpenSettings}
             className="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-750 text-slate-300 border border-slate-700/60 active:scale-95 transition"
@@ -91,7 +109,6 @@ export const CleanHeaderBar: React.FC<CleanHeaderBarProps> = ({
             <Settings className="w-3.5 h-3.5 text-slate-400" />
           </button>
         </div>
-
       </div>
     </header>
   );

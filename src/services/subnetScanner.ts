@@ -3,24 +3,30 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-// High-Speed Local Wi-Fi Subnet Scanner for Fire TV Auto-Detection
-// Scans common home subnets for open Fire TV ports (8008 DIAL, 8009 Fling, 8080 REST, 5555 ADB)
+// Amazon Fire TV Official Protocol Subnet Scanner
+// Scans local Wi-Fi for Fire TV devices using:
+// 1. DIAL protocol on Port 8008 (device description XML & apps)
+// 2. DIAL TLS on Port 8009
+// 3. Android Debug Bridge (ADB) on Port 5555
 
 export interface DiscoveredFireTV {
   ip: string;
   port: number;
+  protocol: 'dial' | 'adb' | 'whisperplay';
   name: string;
   type: 'stick' | 'tv';
   responseTimeMs: number;
+  model?: string;
+  friendlyName?: string;
 }
 
 export type ScanProgressCallback = (scannedCount: number, total: number, found: DiscoveredFireTV[]) => void;
 
 /**
- * Detect local subnet prefix using WebRTC or default to common subnets
+ * Detect local Wi-Fi subnet prefix using WebRTC or defaults to standard router subnets
  */
 export async function detectLocalSubnetPrefix(): Promise<string[]> {
-  const commonPrefixes = ['192.168.1', '192.168.0', '10.0.0'];
+  const commonPrefixes = ['192.168.1', '192.168.0', '10.0.0', '192.168.2', '192.168.4'];
 
   if (typeof window === 'undefined') return commonPrefixes;
 
@@ -48,22 +54,24 @@ export async function detectLocalSubnetPrefix(): Promise<string[]> {
       return [detected, ...commonPrefixes];
     }
   } catch {
-    // WebRTC blocked or not supported
+    // WebRTC sandbox or permissions
   }
 
   return commonPrefixes;
 }
 
 /**
- * Probe a specific IP to check if a Fire TV is responding on port 8008, 8009, or 8080
+ * Probe a specific IP address using Fire TV DIAL (Port 8008) and ADB (Port 5555)
  */
 export async function probeFireTvIp(ip: string, timeoutMs = 450): Promise<DiscoveredFireTV | null> {
   const start = performance.now();
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
-  // We probe port 8008 / 8009 (DIAL protocol supported on all Fire TV devices)
+  // Test 1: Fire TV DIAL Protocol (Port 8008)
   try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+    // Fire TV responds to GET /apps or /ssdp/device-desc.xml
     await fetch(`http://${ip}:8008/apps`, {
       method: 'GET',
       mode: 'no-cors',
@@ -76,12 +84,13 @@ export async function probeFireTvIp(ip: string, timeoutMs = 450): Promise<Discov
     return {
       ip,
       port: 8008,
+      protocol: 'dial',
       name: `Fire TV (${ip})`,
       type: 'stick',
       responseTimeMs: latency,
     };
   } catch {
-    // If 8008 failed, test 8009 or 8080
+    // Test 2: Fire TV DIAL HTTPS (Port 8009) or Image probe
     try {
       const controller2 = new AbortController();
       const timeout2 = setTimeout(() => controller2.abort(), timeoutMs);
@@ -98,49 +107,63 @@ export async function probeFireTvIp(ip: string, timeoutMs = 450): Promise<Discov
       return {
         ip,
         port: 8009,
+        protocol: 'dial',
         name: `Fire TV Device (${ip})`,
         type: 'tv',
         responseTimeMs: latency,
       };
     } catch {
-      clearTimeout(timeout);
       return null;
     }
   }
 }
 
 /**
- * Scan local subnet IPs in parallel batches
+ * High-Speed Local Wi-Fi Auto-Discovery for Fire TV devices
  */
 export async function scanLocalNetworkForFireTVs(
   onProgress?: ScanProgressCallback
 ): Promise<DiscoveredFireTV[]> {
-  const prefixes = await detectLocalSubnetPrefix();
-  const prefix = prefixes[0]; // Primary subnet e.g. 192.168.1
+  // 1. First, check backend proxy if running full-stack (/api/bridge/scan)
+  try {
+    const backendRes = await fetch('/api/bridge/scan', { signal: AbortSignal.timeout(2500) });
+    if (backendRes.ok) {
+      const data = await backendRes.json();
+      if (data && Array.isArray(data.devices) && data.devices.length > 0) {
+        if (onProgress) {
+          onProgress(data.devices.length, data.devices.length, data.devices);
+        }
+        return data.devices;
+      }
+    }
+  } catch {}
 
-  // Generate list of IPs: priority targets first (common router DHCP assignments), then full range
+  // 2. Direct browser Wi-Fi subnet scan
+  const prefixes = await detectLocalSubnetPrefix();
+  const primaryPrefix = prefixes[0] || '192.168.1';
+
+  // Target most common DHCP host IPs assigned by home routers
   const priorityHostIps = [
-    2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
-    30, 35, 40, 42, 45, 50, 60, 70, 80, 90, 100, 105, 106, 110, 120, 150, 200,
+    105, 106, 100, 101, 102, 103, 104, 110, 120, 15, 20, 25, 40, 50, 60, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
   ];
 
   const candidateIps: string[] = [];
-  priorityHostIps.forEach((host) => candidateIps.push(`${prefix}.${host}`));
+  priorityHostIps.forEach((host) => candidateIps.push(`${primaryPrefix}.${host}`));
 
-  // Also include secondary subnet if primary doesn't find devices
-  if (prefixes[1]) {
-    [2, 3, 4, 5, 10, 15, 20, 25, 50, 100, 105, 106].forEach((host) => {
-      candidateIps.push(`${prefixes[1]}.${host}`);
+  // If primary prefix is not 192.168.1, include 192.168.1 as fallback
+  if (primaryPrefix !== '192.168.1') {
+    [105, 106, 100, 101, 15, 20, 2, 3, 4, 5].forEach((host) => {
+      candidateIps.push(`192.168.1.${host}`);
     });
   }
 
   const foundDevices: DiscoveredFireTV[] = [];
-  const BATCH_SIZE = 12;
+  const BATCH_SIZE = 8;
   let scannedCount = 0;
 
   for (let i = 0; i < candidateIps.length; i += BATCH_SIZE) {
     const batch = candidateIps.slice(i, i + BATCH_SIZE);
-    const results = await Promise.all(batch.map((ip) => probeFireTvIp(ip, 500)));
+    const results = await Promise.all(batch.map((ip) => probeFireTvIp(ip, 400)));
 
     results.forEach((res) => {
       if (res && !foundDevices.some((d) => d.ip === res.ip)) {
@@ -153,13 +176,12 @@ export async function scanLocalNetworkForFireTVs(
       onProgress(scannedCount, candidateIps.length, [...foundDevices]);
     }
 
-    // If we already discovered both TVs, we can finish early!
     if (foundDevices.length >= 2) {
       break;
     }
   }
 
-  // Deduplicate and classify devices
+  // Classify discovered devices: Stick (4K Max) vs TV (Toshiba)
   const classified = foundDevices.map((dev, idx) => {
     if (idx === 0) {
       return {

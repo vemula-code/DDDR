@@ -7,7 +7,7 @@ export type RoutingMode = 'smart_hybrid' | 'firestick_only' | 'toshiba_tv_only' 
 
 export type TargetDeviceType = 'toshiba_tv' | 'firestick_4k';
 
-export type ProtocolType = 'websocket' | 'http_rest' | 'web_bluetooth' | 'adb_bridge';
+export type ProtocolType = 'websocket' | 'http_rest' | 'web_bluetooth' | 'adb_bridge' | 'direct_wifi';
 
 export interface DeviceState {
   id: TargetDeviceType;

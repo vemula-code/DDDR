@@ -29,6 +29,10 @@ import {
   Sparkles,
   CheckCircle2,
   Search,
+  Download,
+  Zap,
+  HelpCircle,
+  FileCode,
 } from 'lucide-react';
 
 interface CleanFireRemoteProps {
@@ -43,6 +47,9 @@ interface CleanFireRemoteProps {
   tvVolume: number;
   onOpenPairing: (deviceId: 'firestick_4k' | 'toshiba_tv') => void;
   onOpenAutoDetect: () => void;
+  onOpenWizard: () => void;
+  bridgeStatus?: 'connected' | 'connecting' | 'disconnected' | 'error';
+  bridgeLatency?: number;
 }
 
 export const CleanFireRemote: React.FC<CleanFireRemoteProps> = ({
@@ -57,6 +64,9 @@ export const CleanFireRemote: React.FC<CleanFireRemoteProps> = ({
   tvVolume,
   onOpenPairing,
   onOpenAutoDetect,
+  onOpenWizard,
+  bridgeStatus = 'disconnected',
+  bridgeLatency = 0,
 }) => {
   const [isTransmitting, setIsTransmitting] = useState(false);
   const [lastAction, setLastAction] = useState<string>('Ready');
@@ -79,9 +89,8 @@ export const CleanFireRemote: React.FC<CleanFireRemoteProps> = ({
 
   return (
     <div className="w-full max-w-sm mx-auto flex flex-col items-center">
-      
       {/* 1. TOP DEVICE SELECTOR PILLS (Simple for anyone to use!) */}
-      <div className="w-full bg-slate-900/90 border border-slate-800 rounded-3xl p-1.5 shadow-lg mb-4 flex items-center justify-between gap-1.5">
+      <div className="w-full bg-slate-900/90 border border-slate-800 rounded-3xl p-1.5 shadow-lg mb-3 flex items-center justify-between gap-1.5">
         <button
           onClick={() => {
             playClickSound('select', soundEnabled);
@@ -124,11 +133,25 @@ export const CleanFireRemote: React.FC<CleanFireRemoteProps> = ({
       </div>
 
       {/* 2. AUTO-DISCOVERED WI-FI STATUS BADGE & AUTO-DETECT BUTTON */}
-      <div className="w-full mb-3 flex items-center justify-between px-2.5 py-1.5 bg-slate-900/60 border border-slate-800/80 rounded-2xl text-[11px] text-slate-400">
-        <div className="flex items-center gap-1.5 text-emerald-400 font-semibold truncate">
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
-          <span className="truncate">{activeDevice.name} ({activeDevice.ip})</span>
-        </div>
+      <div className="w-full mb-3 flex items-center justify-between px-3 py-1.5 bg-slate-900/60 border border-slate-800/80 rounded-2xl text-[11px] text-slate-400">
+        <button
+          onClick={() => onOpenPairing(selectedDeviceId)}
+          className="flex items-center gap-1.5 font-semibold truncate hover:text-slate-200 transition text-left"
+          title="Click to view or edit device IP"
+        >
+          <span
+            className={`w-2 h-2 rounded-full flex-shrink-0 ${
+              activeDevice.status === 'connected'
+                ? 'bg-emerald-400 animate-pulse'
+                : 'bg-amber-400 animate-ping'
+            }`}
+          />
+          <span className={`truncate ${activeDevice.status === 'connected' ? 'text-emerald-400' : 'text-amber-300'}`}>
+            {activeDevice.status === 'connected'
+              ? `Connected • ${activeDevice.name} (${activeDevice.ip})`
+              : `Searching Wi-Fi • ${activeDevice.name}`}
+          </span>
+        </button>
         <div className="flex items-center gap-1 flex-shrink-0">
           <button
             onClick={onOpenAutoDetect}
@@ -143,7 +166,6 @@ export const CleanFireRemote: React.FC<CleanFireRemoteProps> = ({
 
       {/* 3. REALISTIC PHYSICAL FIRE TV REMOTE CHASSIS */}
       <div className="relative w-full bg-gradient-to-b from-slate-900 via-slate-925 to-slate-950 rounded-[48px] p-5 sm:p-6 border-2 border-slate-800 shadow-[0_20px_50px_rgba(0,0,0,0.8)] flex flex-col items-center">
-        
         {/* Top Section: Power, Alexa Glowing LED Ring, Input */}
         <div className="w-full flex items-center justify-between pb-3">
           {/* Quick TV Input Button */}
@@ -247,9 +269,8 @@ export const CleanFireRemote: React.FC<CleanFireRemoteProps> = ({
           </button>
         </div>
 
-        {/* 5. BACK, HOME, MENU (The Essential Fire TV Trio) */}
+        {/* 5. BACK, HOME, MENU */}
         <div className="w-full grid grid-cols-3 gap-3 my-2.5">
-          {/* Back */}
           <button
             onClick={() => pressBtn('BACK', 'Back', activeDevice.id)}
             className="flex flex-col items-center justify-center py-3 rounded-2xl bg-slate-800 hover:bg-slate-750 text-slate-200 border border-slate-700/70 shadow-sm active:scale-90 transition"
@@ -259,7 +280,6 @@ export const CleanFireRemote: React.FC<CleanFireRemoteProps> = ({
             <span className="text-[10px] text-slate-400">Back</span>
           </button>
 
-          {/* Home */}
           <button
             onClick={() => pressBtn('HOME', 'Home', activeDevice.id)}
             className="flex flex-col items-center justify-center py-3 rounded-2xl bg-slate-800 hover:bg-slate-750 text-cyan-300 border border-cyan-500/40 shadow-sm active:scale-90 transition"
@@ -269,7 +289,6 @@ export const CleanFireRemote: React.FC<CleanFireRemoteProps> = ({
             <span className="text-[10px] font-semibold text-cyan-300">Home</span>
           </button>
 
-          {/* Menu */}
           <button
             onClick={() => pressBtn('MENU', 'Menu', activeDevice.id)}
             className="flex flex-col items-center justify-center py-3 rounded-2xl bg-slate-800 hover:bg-slate-750 text-slate-200 border border-slate-700/70 shadow-sm active:scale-90 transition"
@@ -280,7 +299,7 @@ export const CleanFireRemote: React.FC<CleanFireRemoteProps> = ({
           </button>
         </div>
 
-        {/* 6. MEDIA PLAYBACK (Rewind, Play/Pause, Fast Forward) */}
+        {/* 6. MEDIA PLAYBACK */}
         <div className="w-full grid grid-cols-3 gap-3 my-2">
           <button
             onClick={() => pressBtn('REWIND', 'Rewind (-10s)', isStick ? 'firestick_4k' : 'toshiba_tv')}
@@ -295,7 +314,11 @@ export const CleanFireRemote: React.FC<CleanFireRemoteProps> = ({
             className="py-2.5 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/50 flex items-center justify-center active:scale-90 transition shadow-sm"
             title="Play / Pause"
           >
-            {isPlaying ? <Pause className="w-4 h-4 fill-cyan-400" /> : <Play className="w-4 h-4 fill-cyan-400 ml-0.5" />}
+            {isPlaying ? (
+              <Pause className="w-4 h-4 fill-cyan-400" />
+            ) : (
+              <Play className="w-4 h-4 fill-cyan-400 ml-0.5" />
+            )}
           </button>
 
           <button
@@ -307,7 +330,7 @@ export const CleanFireRemote: React.FC<CleanFireRemoteProps> = ({
           </button>
         </div>
 
-        {/* 7. VOLUME CONTROLS (Always routes sound to Toshiba TV seamlessly!) */}
+        {/* 7. VOLUME CONTROLS */}
         <div className="w-full bg-slate-850/90 border border-slate-750 rounded-2xl p-2.5 my-2 flex items-center justify-between gap-2 shadow-sm">
           <button
             onClick={() => pressBtn('VOLUME_DOWN', 'Volume Down (-)', 'toshiba_tv')}
@@ -334,7 +357,7 @@ export const CleanFireRemote: React.FC<CleanFireRemoteProps> = ({
           </button>
         </div>
 
-        {/* 8. QUICK KEYBOARD & VOICE BUTTON */}
+        {/* 8. KEYBOARD & VOICE BUTTON */}
         <div className="w-full my-2">
           <button
             onClick={onOpenKeyboard}
@@ -345,13 +368,12 @@ export const CleanFireRemote: React.FC<CleanFireRemoteProps> = ({
           </button>
         </div>
 
-        {/* 9. THE 4 ICONIC APP SHORTCUT BUTTONS (Like physical Fire TV Remote!) */}
+        {/* 9. ONE-TAP APP SHORTCUTS */}
         <div className="w-full pt-2 border-t border-slate-800/80 mt-1">
           <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-2 font-semibold">
             One-Tap Apps (Firestick 4K Max)
           </p>
           <div className="grid grid-cols-2 gap-2">
-            {/* Prime Video */}
             <button
               onClick={() => pressBtn('LAUNCH_APP', 'Launched Prime Video', 'firestick_4k')}
               className="py-3 px-3 rounded-xl bg-[#002f6c] hover:bg-[#003b87] border border-blue-400/40 text-white text-xs font-bold tracking-tight shadow flex items-center justify-center gap-1.5 active:scale-95 transition"
@@ -359,7 +381,6 @@ export const CleanFireRemote: React.FC<CleanFireRemoteProps> = ({
               <span>prime video</span>
             </button>
 
-            {/* Netflix */}
             <button
               onClick={() => pressBtn('LAUNCH_APP', 'Launched Netflix', 'firestick_4k')}
               className="py-3 px-3 rounded-xl bg-black hover:bg-slate-900 border border-red-600/50 text-[#e50914] text-xs font-black tracking-wider shadow flex items-center justify-center gap-1.5 active:scale-95 transition"
@@ -367,7 +388,6 @@ export const CleanFireRemote: React.FC<CleanFireRemoteProps> = ({
               <span>NETFLIX</span>
             </button>
 
-            {/* YouTube */}
             <button
               onClick={() => pressBtn('LAUNCH_APP', 'Launched YouTube', 'firestick_4k')}
               className="py-3 px-3 rounded-xl bg-[#282828] hover:bg-[#333333] border border-red-500/40 text-white text-xs font-bold tracking-tight shadow flex items-center justify-center gap-1.5 active:scale-95 transition"
@@ -376,7 +396,6 @@ export const CleanFireRemote: React.FC<CleanFireRemoteProps> = ({
               <span>YouTube</span>
             </button>
 
-            {/* Disney+ */}
             <button
               onClick={() => pressBtn('LAUNCH_APP', 'Launched Disney+', 'firestick_4k')}
               className="py-3 px-3 rounded-xl bg-[#0b1437] hover:bg-[#121f52] border border-cyan-400/40 text-cyan-200 text-xs font-bold tracking-tight shadow flex items-center justify-center gap-1.5 active:scale-95 transition"
@@ -385,7 +404,6 @@ export const CleanFireRemote: React.FC<CleanFireRemoteProps> = ({
             </button>
           </div>
         </div>
-
       </div>
 
       {/* Subtle feedback toast at the bottom */}
@@ -394,6 +412,55 @@ export const CleanFireRemote: React.FC<CleanFireRemoteProps> = ({
         <span>{lastAction}</span>
       </div>
 
+      {/* 10. DOWNLOAD GUIDE & BRIDGE WIDGET CARD */}
+      <div className="w-full mt-4 p-3.5 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-lg flex flex-col gap-2.5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span
+              className={`w-2.5 h-2.5 rounded-full ${
+                bridgeStatus === 'connected'
+                  ? 'bg-emerald-400 shadow-[0_0_8px_#34d399]'
+                  : 'bg-amber-400'
+              }`}
+            />
+            <span className="text-xs font-semibold text-slate-200">
+              {bridgeStatus === 'connected'
+                ? `Bridge Connected (${bridgeLatency}ms)`
+                : 'Mobile Wi-Fi Auto-Engine'}
+            </span>
+          </div>
+
+          <button
+            onClick={onOpenWizard}
+            className="text-[11px] text-cyan-400 hover:text-cyan-300 font-medium flex items-center gap-1"
+          >
+            <Zap className="w-3 h-3 text-cyan-400" />
+            Setup &amp; Help
+          </button>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {/* Download to Desktop Link */}
+          <a
+            href="/AI_MIGRATION_GUIDE.md"
+            download="AI_MIGRATION_GUIDE.md"
+            className="flex-1 py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-750 text-cyan-300 border border-cyan-800/50 text-[11px] font-semibold flex items-center justify-center gap-1.5 transition active:scale-95"
+            title="Download full technical migration guide to desktop"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>Save Guide to Desktop</span>
+          </a>
+
+          {/* Open Wizard */}
+          <button
+            onClick={onOpenWizard}
+            className="py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-300 border border-slate-700/60 text-[11px] font-semibold flex items-center justify-center gap-1.5 transition active:scale-95"
+          >
+            <FileCode className="w-3.5 h-3.5 text-amber-400" />
+            <span>Bridge Scripts</span>
+          </button>
+        </div>
+      </div>
     </div>
   );
 };
