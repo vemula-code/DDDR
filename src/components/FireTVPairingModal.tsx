@@ -7,6 +7,7 @@ import React, { useState } from 'react';
 import { probeFireTvIp } from '../services/subnetScanner';
 import { bridgeManager } from '../services/bridgeClient';
 import { saveStoredPairing } from '../services/firetvRestApi';
+import { sendDialCommandViaForm } from '../services/wifiDiscovery';
 import {
   X,
   Tv,
@@ -75,6 +76,20 @@ export const FireTVPairingModal: React.FC<FireTVPairingModalProps> = ({
       ip: ip.trim(),
       key: 'SELECT',
     });
+    setTimeout(() => setTestPulseSent(false), 2000);
+  };
+
+  const handleWake = () => {
+    if (!ip.trim()) return;
+    setTestPulseSent(true);
+    sendDialCommandViaForm(ip.trim(), 'system');
+    setTimeout(() => setTestPulseSent(false), 2000);
+  };
+
+  const handleLaunchYouTube = () => {
+    if (!ip.trim()) return;
+    setTestPulseSent(true);
+    sendDialCommandViaForm(ip.trim(), 'YouTube');
     setTimeout(() => setTestPulseSent(false), 2000);
   };
 
@@ -153,14 +168,30 @@ export const FireTVPairingModal: React.FC<FireTVPairingModalProps> = ({
               </span>
             </div>
 
-            {testResult.alive && (
+            <div className="flex items-center gap-1.5 flex-wrap">
               <button
-                onClick={handleSendTestPulse}
-                className="px-2.5 py-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-lg text-[10px] active:scale-95 transition"
+                onClick={handleWake}
+                className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg text-[10px] active:scale-95 transition"
+                title="Wake Fire TV via DIAL protocol"
               >
-                {testPulseSent ? 'Sent!' : 'Pulse Test'}
+                Wake TV
               </button>
-            )}
+              <button
+                onClick={handleLaunchYouTube}
+                className="px-2.5 py-1 bg-red-600 hover:bg-red-500 text-white font-bold rounded-lg text-[10px] active:scale-95 transition"
+                title="Launch YouTube on TV"
+              >
+                YouTube
+              </button>
+              {testResult.alive && (
+                <button
+                  onClick={handleSendTestPulse}
+                  className="px-2.5 py-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-lg text-[10px] active:scale-95 transition"
+                >
+                  {testPulseSent ? 'Sent!' : 'Pulse Test'}
+                </button>
+              )}
+            </div>
           </div>
         )}
 

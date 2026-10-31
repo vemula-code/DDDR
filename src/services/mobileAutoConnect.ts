@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { FireTVDevice, getSavedDevices, saveDevices } from './wifiDiscovery';
+import { FireTVDevice, getSavedDevices, saveDevices, sendDialCommandViaForm } from './wifiDiscovery';
 import { detectLocalSubnetPrefix, scanLocalNetworkForFireTVs } from './subnetScanner';
 
 export interface AutoConnectStatus {
@@ -168,16 +168,8 @@ class MobileAutoConnectEngine {
       };
       const appName = dialAppMap[extra.packageName] || 'YouTube';
 
-      try {
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 800);
-        await fetch(`http://${device.ip}:8008/apps/${appName}`, {
-          method: 'POST',
-          mode: 'no-cors',
-          signal: controller.signal,
-        }).catch(() => {});
-        clearTimeout(timer);
-      } catch {}
+      // Zero-CORS form submission to TV
+      sendDialCommandViaForm(device.ip, appName);
 
       // Also try backend DIAL proxy if available
       try {
@@ -193,28 +185,11 @@ class MobileAutoConnectEngine {
 
     // 2. Physical Navigation & Media Key Events via DIAL / Whisperplay
     try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 700);
-
-      // System power / wake endpoint
       if (key === 'POWER' || key === 'TV_POWER' || key === 'STICK_POWER') {
-        await fetch(`http://${device.ip}:8008/apps/system`, {
-          method: 'POST',
-          mode: 'no-cors',
-          signal: controller.signal,
-        }).catch(() => {});
+        sendDialCommandViaForm(device.ip, 'system');
       }
 
-      // Fire TV Remote command endpoint
-      await fetch(`http://${device.ip}:8008/apps/FireTVRemote?cmd=${encodeURIComponent(key)}&code=${keycode}`, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key, keycode, text: extra?.text }),
-        signal: controller.signal,
-      }).catch(() => {});
-
-      clearTimeout(timer);
+      sendDialCommandViaForm(device.ip, `FireTVRemote?cmd=${encodeURIComponent(key)}&code=${keycode}`);
     } catch {}
 
     const latencyMs = Math.max(3, Math.round(performance.now() - start));

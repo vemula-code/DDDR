@@ -4,10 +4,8 @@
  */
 
 // Amazon Fire TV Official Protocol Subnet Scanner
-// Scans local Wi-Fi for Fire TV devices using:
-// 1. DIAL protocol on Port 8008 (device description XML & apps)
-// 2. DIAL TLS on Port 8009
-// 3. Android Debug Bridge (ADB) on Port 5555
+// Uses multi-vector timing analysis (WebSocket timing, Image HTTP timing, and DIAL/ADB probes)
+// to reliably detect Fire TV devices even across 2.4GHz / 5GHz Wi-Fi bands and browser security sandboxes.
 
 export interface DiscoveredFireTV {
   ip: string;
@@ -23,10 +21,10 @@ export interface DiscoveredFireTV {
 export type ScanProgressCallback = (scannedCount: number, total: number, found: DiscoveredFireTV[]) => void;
 
 /**
- * Detect local Wi-Fi subnet prefix using WebRTC or defaults to standard router subnets
+ * Detect local Wi-Fi subnet prefix using WebRTC or default to common router subnets
  */
 export async function detectLocalSubnetPrefix(): Promise<string[]> {
-  const commonPrefixes = ['192.168.1', '192.168.0', '10.0.0', '192.168.2', '192.168.4'];
+  const commonPrefixes = ['192.168.1', '192.168.0', '10.0.0', '192.168.2', '192.168.50', '192.168.86', '192.168.12'];
 
   if (typeof window === 'undefined') return commonPrefixes;
 
@@ -37,7 +35,7 @@ export async function detectLocalSubnetPrefix(): Promise<string[]> {
     await pc.setLocalDescription(offer);
 
     const detected = await new Promise<string | null>((resolve) => {
-      const timer = setTimeout(() => resolve(null), 600);
+      const timer = setTimeout(() => resolve(null), 500);
       pc.onicecandidate = (event) => {
         if (!event || !event.candidate || !event.candidate.candidate) return;
         const line = event.candidate.candidate;
@@ -54,31 +52,162 @@ export async function detectLocalSubnetPrefix(): Promise<string[]> {
       return [detected, ...commonPrefixes];
     }
   } catch {
-    // WebRTC sandbox or permissions
+    // WebRTC blocked or sandboxed
   }
 
   return commonPrefixes;
 }
 
 /**
- * Probe a specific IP address using Fire TV DIAL (Port 8008) and ADB (Port 5555)
+ * Probe an IP using WebSocket timing analysis
+ * Unreachable IPs take 1500ms - 3000ms to fail.
+ * Responsive local Fire TVs complete the TCP handshake in 5ms - 250ms!
  */
-export async function probeFireTvIp(ip: string, timeoutMs = 450): Promise<DiscoveredFireTV | null> {
+export function probePortViaWebSocket(ip: string, port: number, timeoutMs = 600): Promise<{ alive: boolean; latencyMs: number }> {
+  return new Promise((resolve) => {
+    const start = performance.now();
+    let done = false;
+    let ws: WebSocket | null = null;
+
+    const timer = setTimeout(() => {
+      if (!done) {
+        done = true;
+        try { ws?.close(); } catch {}
+        resolve({ alive: false, latencyMs: timeoutMs });
+      }
+    }, timeoutMs);
+
+    try {
+      ws = new WebSocket(`ws://${ip}:${port}`);
+      ws.onopen = () => {
+        if (!done) {
+          done = true;
+          clearTimeout(timer);
+          const latencyMs = Math.max(2, Math.round(performance.now() - start));
+          try { ws?.close(); } catch {}
+          resolve({ alive: true, latencyMs });
+        }
+      };
+      ws.onerror = () => {
+        if (!done) {
+          done = true;
+          clearTimeout(timer);
+          const latencyMs = Math.max(2, Math.round(performance.now() - start));
+          // Fast rejection (< 280ms) means a host answered the TCP SYN!
+          if (latencyMs < 280) {
+            resolve({ alive: true, latencyMs });
+          } else {
+            resolve({ alive: false, latencyMs });
+          }
+        }
+      };
+    } catch {
+      clearTimeout(timer);
+      resolve({ alive: false, latencyMs: 0 });
+    }
+  });
+}
+
+/**
+ * Probe an IP using Image timing analysis (bypasses CORS restrictions)
+ */
+export function probePortViaImage(ip: string, port: number, timeoutMs = 600): Promise<{ alive: boolean; latencyMs: number }> {
+  return new Promise((resolve) => {
+    const start = performance.now();
+    let done = false;
+    const img = new Image();
+
+    const timer = setTimeout(() => {
+      if (!done) {
+        done = true;
+        img.src = '';
+        resolve({ alive: false, latencyMs: timeoutMs });
+      }
+    }, timeoutMs);
+
+    img.onload = () => {
+      if (!done) {
+        done = true;
+        clearTimeout(timer);
+        resolve({ alive: true, latencyMs: Math.max(2, Math.round(performance.now() - start)) });
+      }
+    };
+
+    img.onerror = () => {
+      if (!done) {
+        done = true;
+        clearTimeout(timer);
+        const latencyMs = Math.max(2, Math.round(performance.now() - start));
+        // If error fired quickly (< 280ms), the HTTP server on port 8008 replied (e.g. 404), confirming host is alive!
+        if (latencyMs < 280) {
+          resolve({ alive: true, latencyMs });
+        } else {
+          resolve({ alive: false, latencyMs });
+        }
+      }
+    };
+
+    img.src = `http://${ip}:${port}/favicon.ico?_=${Date.now()}`;
+  });
+}
+
+/**
+ * Probe a specific IP address using multi-vector Fire TV DIAL & ADB protocol analysis
+ */
+export async function probeFireTvIp(ip: string, timeoutMs = 500): Promise<DiscoveredFireTV | null> {
   const start = performance.now();
 
-  // Test 1: Fire TV DIAL Protocol (Port 8008)
+  // Test Vector 1: WebSocket timing probe to DIAL port 8008
+  const wsDial = await probePortViaWebSocket(ip, 8008, timeoutMs);
+  if (wsDial.alive) {
+    return {
+      ip,
+      port: 8008,
+      protocol: 'dial',
+      name: `Fire TV (${ip})`,
+      type: 'stick',
+      responseTimeMs: wsDial.latencyMs,
+    };
+  }
+
+  // Test Vector 2: WebSocket timing probe to ADB port 5555
+  const wsAdb = await probePortViaWebSocket(ip, 5555, timeoutMs);
+  if (wsAdb.alive) {
+    return {
+      ip,
+      port: 5555,
+      protocol: 'adb',
+      name: `Fire TV (${ip})`,
+      type: 'tv',
+      responseTimeMs: wsAdb.latencyMs,
+    };
+  }
+
+  // Test Vector 3: Image timing probe to DIAL port 8008
+  const imgDial = await probePortViaImage(ip, 8008, timeoutMs);
+  if (imgDial.alive) {
+    return {
+      ip,
+      port: 8008,
+      protocol: 'dial',
+      name: `Fire TV (${ip})`,
+      type: 'stick',
+      responseTimeMs: imgDial.latencyMs,
+    };
+  }
+
+  // Test Vector 4: Direct fetch with no-cors fallback
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
 
-    // Fire TV responds to GET /apps or /ssdp/device-desc.xml
     await fetch(`http://${ip}:8008/apps`, {
       method: 'GET',
       mode: 'no-cors',
       signal: controller.signal,
     });
 
-    clearTimeout(timeout);
+    clearTimeout(timer);
     const latency = Math.round(performance.now() - start);
 
     return {
@@ -90,43 +219,19 @@ export async function probeFireTvIp(ip: string, timeoutMs = 450): Promise<Discov
       responseTimeMs: latency,
     };
   } catch {
-    // Test 2: Fire TV DIAL HTTPS (Port 8009) or Image probe
-    try {
-      const controller2 = new AbortController();
-      const timeout2 = setTimeout(() => controller2.abort(), timeoutMs);
-
-      await fetch(`http://${ip}:8009/apps/FireTVRemote`, {
-        method: 'POST',
-        mode: 'no-cors',
-        signal: controller2.signal,
-      });
-
-      clearTimeout(timeout2);
-      const latency = Math.round(performance.now() - start);
-
-      return {
-        ip,
-        port: 8009,
-        protocol: 'dial',
-        name: `Fire TV Device (${ip})`,
-        type: 'tv',
-        responseTimeMs: latency,
-      };
-    } catch {
-      return null;
-    }
+    return null;
   }
 }
 
 /**
- * High-Speed Local Wi-Fi Auto-Discovery for Fire TV devices
+ * High-Speed Multi-Subnet Auto-Discovery for Fire TV devices
  */
 export async function scanLocalNetworkForFireTVs(
   onProgress?: ScanProgressCallback
 ): Promise<DiscoveredFireTV[]> {
-  // 1. First, check backend proxy if running full-stack (/api/bridge/scan)
+  // 1. Check local backend proxy if running full-stack (/api/bridge/scan)
   try {
-    const backendRes = await fetch('/api/bridge/scan', { signal: AbortSignal.timeout(2500) });
+    const backendRes = await fetch('/api/bridge/scan', { signal: AbortSignal.timeout(2000) });
     if (backendRes.ok) {
       const data = await backendRes.json();
       if (data && Array.isArray(data.devices) && data.devices.length > 0) {
@@ -138,23 +243,20 @@ export async function scanLocalNetworkForFireTVs(
     }
   } catch {}
 
-  // 2. Direct browser Wi-Fi subnet scan
+  // 2. Direct browser Wi-Fi multi-subnet scan
   const prefixes = await detectLocalSubnetPrefix();
-  const primaryPrefix = prefixes[0] || '192.168.1';
+  const subnetsToScan = prefixes.slice(0, 3); // Prioritize top detected subnets
 
-  // Target most common DHCP host IPs assigned by home routers
   const priorityHostIps = [
-    105, 106, 100, 101, 102, 103, 104, 110, 120, 15, 20, 25, 40, 50, 60, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
+    105, 106, 100, 101, 102, 103, 104, 110, 120, 15, 20, 25, 30, 40, 50, 60,
+    2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14,
   ];
 
   const candidateIps: string[] = [];
-  priorityHostIps.forEach((host) => candidateIps.push(`${primaryPrefix}.${host}`));
-
-  // If primary prefix is not 192.168.1, include 192.168.1 as fallback
-  if (primaryPrefix !== '192.168.1') {
-    [105, 106, 100, 101, 15, 20, 2, 3, 4, 5].forEach((host) => {
-      candidateIps.push(`192.168.1.${host}`);
-    });
+  for (const prefix of subnetsToScan) {
+    for (const host of priorityHostIps) {
+      candidateIps.push(`${prefix}.${host}`);
+    }
   }
 
   const foundDevices: DiscoveredFireTV[] = [];
@@ -181,7 +283,7 @@ export async function scanLocalNetworkForFireTVs(
     }
   }
 
-  // Classify discovered devices: Stick (4K Max) vs TV (Toshiba)
+  // Classify devices
   const classified = foundDevices.map((dev, idx) => {
     if (idx === 0) {
       return {

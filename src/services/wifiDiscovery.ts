@@ -17,7 +17,7 @@ export interface FireTVDevice {
   lastPingMs?: number;
 }
 
-const STORAGE_KEY = 'dremote_discovered_devices_v3';
+const STORAGE_KEY = 'dremote_discovered_devices_v4';
 
 export const DEFAULT_DEVICES: FireTVDevice[] = [
   {
@@ -65,15 +65,47 @@ export function saveDevices(devices: FireTVDevice[]) {
 }
 
 /**
- * Real Fire TV Wi-Fi Protocol Auto-Discovery:
- * 1. Probes currently stored IPs on DIAL port 8008
- * 2. If not responsive, scans local Wi-Fi subnet using Fire TV DIAL & ADB protocols
- * 3. Updates and persists verified IP addresses
+ * Send DIAL command using dynamic form submission
+ * Bypasses browser CORS restrictions completely by utilizing standard HTML form POST
+ */
+export function sendDialCommandViaForm(ip: string, endpoint: string): boolean {
+  if (typeof document === 'undefined') return false;
+  try {
+    let iframe = document.getElementById('dial_sink_iframe') as HTMLIFrameElement;
+    if (!iframe) {
+      iframe = document.createElement('iframe');
+      iframe.id = 'dial_sink_iframe';
+      iframe.name = 'dial_sink_iframe';
+      iframe.style.display = 'none';
+      iframe.style.position = 'absolute';
+      iframe.style.width = '0';
+      iframe.style.height = '0';
+      iframe.style.border = 'none';
+      document.body.appendChild(iframe);
+    }
+
+    const form = document.createElement('form');
+    form.target = 'dial_sink_iframe';
+    form.method = 'POST';
+    form.action = `http://${ip}:8008/apps/${endpoint}`;
+    document.body.appendChild(form);
+    form.submit();
+    setTimeout(() => {
+      try { form.remove(); } catch {}
+    }, 120);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Real Fire TV Wi-Fi Protocol Auto-Discovery
  */
 export async function autoDiscoverWifiDevices(): Promise<FireTVDevice[]> {
   const current = getSavedDevices();
 
-  // Step 1: Probe current devices to see if they are actively responding on the network
+  // Step 1: Probe stored IPs using multi-vector timing analysis
   const [stickProbe, tvProbe] = await Promise.all([
     probeFireTvIp(current[0].ip, 500),
     probeFireTvIp(current[1].ip, 500),
@@ -124,7 +156,6 @@ export async function autoDiscoverWifiDevices(): Promise<FireTVDevice[]> {
     }
   } catch {}
 
-  // If scan didn't find any yet, mark as searching (not fake connected)
   const searchingState = current.map((dev) => ({
     ...dev,
     status: 'searching' as const,
@@ -134,48 +165,32 @@ export async function autoDiscoverWifiDevices(): Promise<FireTVDevice[]> {
 }
 
 /**
- * Send Remote Command using Fire TV DIAL protocol
+ * Send Remote Command to Fire TV
  */
 export async function sendFireTVCommand(
   device: FireTVDevice,
   command: string,
   extra?: { text?: string; packageName?: string }
 ): Promise<boolean> {
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 800);
-
-    // If launching an app via DIAL protocol:
-    if (extra?.packageName) {
-      const dialMap: Record<string, string> = {
-        'com.netflix.ninja': 'Netflix',
-        'com.amazon.amazonvideo.livingroom': 'AmazonVideo',
-        'com.amazon.firetv.youtube': 'YouTube',
-        'com.disney.disneyplus': 'DisneyPlus',
-      };
-      const appName = dialMap[extra.packageName] || 'YouTube';
-      await fetch(`http://${device.ip}:8008/apps/${appName}`, {
-        method: 'POST',
-        mode: 'no-cors',
-        signal: controller.signal,
-      }).catch(() => {});
-    } else {
-      // Key event or Wake via DIAL
-      await fetch(
-        `http://${device.ip}:8008/apps/FireTVRemote?cmd=${encodeURIComponent(command)}`,
-        {
-          method: 'POST',
-          mode: 'no-cors',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ command, text: extra?.text }),
-          signal: controller.signal,
-        }
-      ).catch(() => {});
-    }
-
-    clearTimeout(timeout);
+  // If launching an app via DIAL protocol:
+  if (extra?.packageName) {
+    const dialMap: Record<string, string> = {
+      'com.netflix.ninja': 'Netflix',
+      'com.amazon.amazonvideo.livingroom': 'AmazonVideo',
+      'com.amazon.firetv.youtube': 'YouTube',
+      'com.disney.disneyplus': 'DisneyPlus',
+    };
+    const appName = dialMap[extra.packageName] || 'YouTube';
+    sendDialCommandViaForm(device.ip, appName);
     return true;
-  } catch {
-    return false;
   }
+
+  // Wake or Power via DIAL
+  if (command === 'POWER' || command === 'TV_POWER' || command === 'STICK_POWER') {
+    sendDialCommandViaForm(device.ip, 'system');
+  }
+
+  // Send via FireTVRemote command endpoint
+  sendDialCommandViaForm(device.ip, `FireTVRemote?cmd=${encodeURIComponent(command)}`);
+  return true;
 }

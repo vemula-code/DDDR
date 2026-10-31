@@ -203,18 +203,30 @@ export const CleanFireRemote: React.FC<CleanFireRemoteProps> = ({
         {!isStick && (
           <div className="w-full my-2 bg-gradient-to-r from-amber-950/40 via-slate-900 to-cyan-950/40 p-3 rounded-2xl border border-amber-500/40 flex items-center justify-between gap-2 shadow-sm">
             <div className="text-left">
-              <p className="text-xs font-bold text-white">Watch Fire TV Stick 4K?</p>
+              <p className="text-xs font-bold text-white flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-amber-400" />
+                Watch Fire TV Stick 4K?
+              </p>
               <p className="text-[10px] text-slate-400">Switches Toshiba TV input to HDMI 2</p>
             </div>
-            <button
-              onClick={() => {
-                pressBtn('INPUT_HDMI2', 'Switched to HDMI 2 (4K Max)', 'toshiba_tv');
-                onSelectDevice('firestick_4k');
-              }}
-              className="px-3.5 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow active:scale-95 transition"
-            >
-              <span>HDMI 2 (4K)</span>
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => pressBtn('POWER', 'Sent Wake Pulse to TV', 'toshiba_tv')}
+                className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-600/40 font-medium text-[11px] active:scale-95 transition"
+                title="Wake Toshiba TV via DIAL"
+              >
+                Wake TV
+              </button>
+              <button
+                onClick={() => {
+                  pressBtn('INPUT_HDMI2', 'Switched to HDMI 2 (4K Max)', 'toshiba_tv');
+                  onSelectDevice('firestick_4k');
+                }}
+                className="px-3 py-1.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs flex items-center gap-1 shadow active:scale-95 transition"
+              >
+                <span>HDMI 2</span>
+              </button>
+            </div>
           </div>
         )}
 
