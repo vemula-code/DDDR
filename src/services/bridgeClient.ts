@@ -18,7 +18,7 @@ export interface BridgeConfig {
   haEntityStick?: string;
 }
 
-const CONFIG_STORAGE_KEY = 'dremote_bridge_config_v2';
+const CONFIG_STORAGE_KEY = 'dremote_bridge_config_v3';
 
 export const DEFAULT_BRIDGE_CONFIG: BridgeConfig = {
   mode: 'websocket_bridge',
@@ -83,6 +83,7 @@ class BridgeManager {
   private pingTimer: any = null;
   private pingStartTime: number = 0;
   private lastErrorMessage: string = '';
+  private reconnectAttempts = 0;
 
   constructor() {
     if (typeof window !== 'undefined') {
@@ -104,6 +105,7 @@ class BridgeManager {
       } catch {}
       this.ws = null;
     }
+    this.reconnectAttempts = 0;
     this.connectWebSocket();
   }
 
@@ -140,14 +142,28 @@ class BridgeManager {
 
     const host = this.config.wsHost.trim() || 'localhost';
     const port = this.config.wsPort || 8080;
-    const wsUrl = `ws://${host}:${port}`;
 
+    // Avoid connecting to localhost ws from remote HTTPS website on phone
+    if (
+      window.location.protocol === 'https:' &&
+      window.location.hostname !== 'localhost' &&
+      (host === 'localhost' || host === '127.0.0.1')
+    ) {
+      this.notify(
+        'disconnected',
+        'Mobile Direct Mode Active • Run dremote-bridge.py on PC for ADB navigation'
+      );
+      return;
+    }
+
+    const wsUrl = `ws://${host}:${port}`;
     this.notify('connecting', `Connecting to bridge at ${wsUrl}...`);
 
     try {
       this.ws = new WebSocket(wsUrl);
 
       this.ws.onopen = () => {
+        this.reconnectAttempts = 0;
         this.notify('connected', `Connected to local bridge (${wsUrl})`);
         this.startHeartbeat();
       };
@@ -163,13 +179,16 @@ class BridgeManager {
       };
 
       this.ws.onerror = () => {
-        this.notify('disconnected', `Cannot connect to bridge at ${wsUrl}. Run bridge script on host.`);
+        this.notify('disconnected', `Bridge offline (${wsUrl})`);
       };
 
       this.ws.onclose = () => {
         this.stopHeartbeat();
         this.notify('disconnected', `Bridge offline (${wsUrl})`);
-        this.reconnectTimer = setTimeout(() => this.connectWebSocket(), 4000);
+        this.reconnectAttempts++;
+        // Exponential backoff, max 30s
+        const delay = Math.min(30000, 3000 * Math.pow(1.5, Math.min(this.reconnectAttempts, 5)));
+        this.reconnectTimer = setTimeout(() => this.connectWebSocket(), delay);
       };
     } catch (err: any) {
       this.notify('error', err.message || 'WebSocket error');
@@ -223,7 +242,31 @@ class BridgeManager {
       }
     }
 
-    // 2. Home Assistant ADB Integration
+    // 2. HTTP Local Bridge (e.g. node dremote-bridge.js on http://<pc-ip>:8080)
+    const host = this.config.wsHost.trim() || 'localhost';
+    const port = this.config.wsPort || 8080;
+    if (host !== 'localhost' || (typeof window !== 'undefined' && window.location.hostname === 'localhost')) {
+      try {
+        const res = await fetch(`http://${host}:${port}/command`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            target: options.target,
+            ip: options.ip,
+            action: options.key,
+            keycode,
+            text: options.text,
+            packageName: options.packageName,
+          }),
+          signal: AbortSignal.timeout(1000),
+        });
+        if (res.ok) {
+          return { success: true, latencyMs: Math.round(performance.now() - start) };
+        }
+      } catch {}
+    }
+
+    // 3. Home Assistant ADB Integration
     if (this.config.mode === 'home_assistant' && this.config.haUrl && this.config.haToken) {
       try {
         const entityId =
@@ -250,7 +293,7 @@ class BridgeManager {
       }
     }
 
-    // 3. Backend Proxy (/api/bridge/command)
+    // 4. Backend Proxy (/api/bridge/command)
     try {
       const res = await fetch('/api/bridge/command', {
         method: 'POST',
@@ -274,7 +317,7 @@ class BridgeManager {
       }
     } catch {}
 
-    // 4. Fallback to Direct Mobile AutoConnect (DIAL port 8008)
+    // 5. Fallback to Direct Mobile AutoConnect (Zero-CORS DIAL & Form Dispatch)
     try {
       return await mobileAutoConnect.sendDirectKey(
         {

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * DRemote - Dual Fire TV Local Wi-Fi Bridge
+ * DRemote - Dual Fire TV Local Wi-Fi Bridge (Node.js)
  * 
  * Why this bridge is needed:
  * Web browsers on HTTPS (like Vercel) block direct connections to home IP addresses
@@ -13,7 +13,7 @@
  *   node dremote-bridge.js [firestick_ip] [toshiba_tv_ip]
  * 
  * Example:
- *   node dremote-bridge.js 192.168.1.45 192.168.1.42
+ *   node dremote-bridge.js 192.168.1.106 192.168.1.105
  */
 
 const http = require('http');
@@ -24,7 +24,7 @@ const stickIp = process.argv[2] || process.env.FIRESTICK_IP || '192.168.1.106';
 const tvIp = process.argv[3] || process.env.TOSHIBA_TV_IP || '192.168.1.105';
 
 console.log('========================================================');
-console.log('  ⚡ DRemote Dual Fire TV Local Bridge Server');
+console.log('  ⚡ DRemote Dual Fire TV Local Bridge Server (Node.js)');
 console.log(`  Listening on http://0.0.0.0:${PORT}`);
 console.log(`  Target 1 (Firestick 4K Max): ${stickIp}:5555`);
 console.log(`  Target 2 (Toshiba Fire TV):  ${tvIp}:5555`);
@@ -66,6 +66,7 @@ const KEYCODES = {
   power: 26,
   source: 178,
   hdmi2: 178,
+  input_hdmi2: 178,
 };
 
 // Create HTTP API server with CORS enabled for DRemote PWA
@@ -94,33 +95,61 @@ const server = http.createServer((req, res) => {
     req.on('end', () => {
       try {
         const data = JSON.parse(body || '{}');
-        const target = data.target === 'toshiba_tv' ? tvIp : stickIp;
-        const action = (data.action || '').toLowerCase();
+        const targetIp = data.ip || (data.target === 'toshiba_tv' ? tvIp : stickIp);
+        const action = (data.action || data.key || '').toLowerCase();
         const code = KEYCODES[action] || data.keycode;
 
-        if (code) {
-          console.log(`[CMD] -> ${data.target.toUpperCase()} (${target}): action="${action}" keycode=${code}`);
-          exec(`adb -s ${target}:5555 shell input keyevent ${code}`, (err) => {
-            if (err) {
-              console.error(`Error sending to ${target}:`, err.message);
-            }
+        if (action === 'input_hdmi2' || action === 'hdmi2') {
+          // Direct Toshiba TV HDMI 2 Input Switch Intent
+          const cmd = `adb -s ${targetIp}:5555 shell am start -a android.intent.action.VIEW -d "content://android.media.tv/passthrough/com.amazon.tv.ime/.tvinput.TvInputService%2FHW2"`;
+          exec(cmd, (err, stdout, stderr) => {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: !err, details: stdout.trim() }));
           });
+          return;
         }
 
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: true, target, action, code }));
-      } catch (err) {
+        if (data.text) {
+          const cmd = `adb -s ${targetIp}:5555 shell input text "${data.text.replace(/"/g, '\\"')}"`;
+          exec(cmd, (err, stdout, stderr) => {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: !err, details: stdout.trim() }));
+          });
+          return;
+        }
+
+        if (data.packageName) {
+          const cmd = `adb -s ${targetIp}:5555 shell monkey -p ${data.packageName} 1`;
+          exec(cmd, (err, stdout, stderr) => {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: !err, details: stdout.trim() }));
+          });
+          return;
+        }
+
+        if (!code) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: `Unknown key action: ${action}` }));
+          return;
+        }
+
+        const cmd = `adb -s ${targetIp}:5555 shell input keyevent ${code}`;
+        exec(cmd, (err, stdout, stderr) => {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: !err, details: stdout.trim() }));
+        });
+      } catch (e) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: err.message }));
+        res.end(JSON.stringify({ error: 'Invalid JSON body' }));
       }
     });
     return;
   }
 
-  res.writeHead(404);
+  res.writeHead(404, { 'Content-Type': 'text/plain' });
   res.end('Not Found');
 });
 
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`Bridge is ready! In DRemote app, set bridge URL to your computer's IP.`);
+  console.log(`✅ DRemote Bridge running at http://0.0.0.0:${PORT}`);
 });

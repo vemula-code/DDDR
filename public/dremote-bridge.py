@@ -63,14 +63,14 @@ def run_adb(ip, args):
         return False, str(e)
 
 async def handler(websocket):
-    client_ip = websocket.remote_address[0]
+    client_ip = websocket.remote_address[0] if getattr(websocket, 'remote_address', None) else 'client'
     print(f"📱 Remote client connected from {client_ip}")
 
     await websocket.send(json.dumps({
         "type": "handshake",
         "status": "connected",
         "adb": check_adb(),
-        "bridge": "DRemote Python Bridge v2",
+        "bridge": "DRemote Python Bridge v3",
     }))
 
     async for message in websocket:
@@ -100,6 +100,11 @@ async def handler(websocket):
             success, details = run_adb(ip, ["shell", "input", "text", text])
         elif package_name:
             success, details = run_adb(ip, ["shell", "monkey", "-p", package_name, "1"])
+        elif key == "INPUT_HDMI2":
+            # Direct Toshiba TV HDMI 2 Input Switch Intent
+            success, details = run_adb(ip, ["shell", "am", "start", "-a", "android.intent.action.VIEW", "-d", "content://android.media.tv/passthrough/com.amazon.tv.ime/.tvinput.TvInputService%2FHW2"])
+            if not success:
+                success, details = run_adb(ip, ["shell", "input", "keyevent", "178"])
         elif keycode:
             success, details = run_adb(ip, ["shell", "input", "keyevent", str(keycode)])
         else:
@@ -115,7 +120,7 @@ async def handler(websocket):
 
 async def main():
     print("=" * 60)
-    print(f"  ⚡ DRemote Fire TV Local WebSocket Bridge")
+    print(f"  ⚡ DRemote Fire TV Local WebSocket Bridge v3")
     print(f"  Listening on ws://{HOST}:{PORT}")
     print(f"  ADB Installed: {'YES ✅' if check_adb() else 'NO ❌ (Please install Android Platform-Tools)'}")
     print("=" * 60)
