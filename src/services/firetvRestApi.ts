@@ -152,9 +152,34 @@ export async function sendFireTVKey(
     endpoint = `https://${ip}:8080/v1/media?action=${encodeURIComponent(action.toLowerCase())}`;
   }
 
+  // Try local bridge endpoint first if available (bypasses browser mixed content)
+  try {
+    const bridgeRes = await fetch(`http://localhost:8080/command`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ target: ip.includes('105') ? 'toshiba_tv' : 'firestick_4k', action, ip }),
+      signal: AbortSignal.timeout ? AbortSignal.timeout(600) : undefined,
+    }).catch(() => null);
+
+    if (bridgeRes && bridgeRes.ok) {
+      const latencyMs = Math.round(performance.now() - start);
+      return { success: true, latencyMs };
+    }
+  } catch {
+    // Continue to direct REST
+  }
+
+  // Direct Fire TV Lightning REST Endpoint
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 1500);
+    const timeout = setTimeout(() => controller.abort(), 1200);
+
+    // Also send wake / DIAL command to port 8009
+    fetch(`http://${ip}:8009/apps/FireTVRemote`, {
+      method: 'POST',
+      mode: 'no-cors',
+      signal: controller.signal,
+    }).catch(() => {});
 
     await fetch(endpoint, {
       method: 'POST',

@@ -1,0 +1,9 @@
+{
+  "appId": "com.dremote.firetv",
+  "appName": "DRemote",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https",
+    "cleartext": true
+  }
+}
